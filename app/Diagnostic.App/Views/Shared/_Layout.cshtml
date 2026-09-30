@@ -1,0 +1,79 @@
+@inject IConfiguration Config
+@{
+    var appName = Config["AppSettings:AppName"] ?? "HIS ERP";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - @appName</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/lib/bootstrap-icons/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <script>
+        window.APP = {
+            apiBase: '@Config["AppSettings:ApiBaseUrl"]',
+            reportBase: '@Config["AppSettings:ReportBaseUrl"]',
+            appName: '@appName'
+        };
+    </script>
+</head>
+<body>
+<div class="app-shell" id="appShell">
+    <aside class="sidebar" id="sidebar">
+        <a class="brand" href="/">
+            <span class="brand-logo"><i class="bi bi-heart-pulse"></i></span>
+            <span>
+                <span class="brand-name">@appName</span>
+                <span class="brand-sub">Healthcare Information System</span>
+            </span>
+        </a>
+        <div class="module-switch dropdown">
+            <button class="module-btn" data-bs-toggle="dropdown" type="button">
+                <span class="menu-icon"><i class="bi bi-grid" id="moduleIcon"></i></span>
+                <span id="moduleName">Home</span>
+                <i class="bi bi-caret-down-fill ms-auto small"></i>
+            </button>
+            <ul class="dropdown-menu w-100" id="moduleList"></ul>
+        </div>
+        <nav class="menu" id="sideMenu"></nav>
+        <div class="sidebar-foot" id="connStatus">Connecting…</div>
+    </aside>
+
+    <div class="main">
+        <header class="topbar">
+            <button class="btn btn-link text-dark p-0 me-3" id="toggleSidebar" type="button" title="Menu"><i class="bi bi-list fs-4"></i></button>
+            <div class="tenant-title" id="tenantTitle">@appName</div>
+            <div class="ms-auto d-flex align-items-center gap-3">
+                <div class="dropdown">
+                    <button class="btn btn-link text-decoration-none d-flex align-items-center gap-2 p-0" data-bs-toggle="dropdown" type="button">
+                        <span class="avatar" id="userAvatar">NA</span>
+                        <span class="text-start lh-sm d-none d-sm-block">
+                            <span class="d-block small fw-semibold text-dark" id="userName"></span>
+                            <span class="d-block text-muted" style="font-size:.7rem" id="userRole"></span>
+                        </span>
+                        <i class="bi bi-caret-down-fill small text-muted"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="/"><i class="bi bi-house me-2"></i>Home</a></li>
+                        <li><a class="dropdown-item" href="#" id="btnChangePassword"><i class="bi bi-key me-2"></i>Change password</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item text-danger" href="#" id="btnLogout"><i class="bi bi-box-arrow-right me-2"></i>Logout</a></li>
+                    </ul>
+                </div>
+            </div>
+        </header>
+        <main class="content">
+            @RenderBody()
+        </main>
+    </div>
+</div>
+
+<div class="toast-container position-fixed top-0 end-0 p-3" id="toasts"></div>
+
+<script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+<script src="~/js/app.js" asp-append-version="true"></script>
+@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

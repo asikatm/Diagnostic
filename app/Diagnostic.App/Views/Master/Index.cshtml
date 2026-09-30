@@ -1,0 +1,9 @@
+@{
+    ViewData["Title"] = "Setup";
+}
+<div id="masterRoot"><div class="empty">Loading…</div></div>
+
+@section Scripts {
+<script src="~/js/masters.js" asp-append-version="true"></script>
+<script>App.ready(() => MasterPage.init('@ViewBag.MasterKey'));</script>
+}

@@ -1,0 +1,58 @@
+@{
+    ViewData["Title"] = "Lab Report";
+}
+<div class="page-head">
+    <div><h1>Lab Report with Letter Head</h1><div class="sub">Print or reprint finalized reports. Handing over is done in Report Delivery.</div></div>
+    <div class="ms-auto d-flex gap-2 align-items-center">
+        <input class="form-control form-control-sm" id="invoiceNo" placeholder="Invoice no" style="width:200px" autofocus>
+        <button class="btn btn-primary btn-sm" id="btnFind"><i class="bi bi-search me-1"></i>Find</button>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body d-flex flex-wrap gap-3 align-items-end">
+        <div><label class="form-label">Print on</label>
+            <select class="form-select form-select-sm" id="lhMode"><option value="true">With letter head</option><option value="false">Pre-printed pad (no header)</option></select></div>
+        <div><label class="form-label">Letter head</label><select class="form-select form-select-sm" id="letterHead" style="min-width:220px"></select></div>
+    </div>
+</div>
+
+<div id="result"><div class="card"><div class="empty">Enter an invoice number (or scan the invoice barcode).</div></div></div>
+
+@section Scripts {
+<script>
+App.ready(async () => {
+    const $ = id => document.getElementById(id);
+    const [lookups, rights] = await Promise.all([App.api('/api/diag/lookups/billing'), App.rights()]);
+    $('letterHead').innerHTML = App.options(lookups.letterHeads, lookups.letterHeads[0]?.id, null);
+    $('lhMode').value = String(App.store.get('diag.letterHeadMode') ?? true);
+    $('lhMode').onchange = () => App.store.set('diag.letterHeadMode', $('lhMode').value === 'true');
+
+    async function find() {
+        const no = $('invoiceNo').value.trim();
+        if (!no) return;
+        const inv = await App.run(() => App.api('/api/diag/investigations/by-no/' + encodeURIComponent(no)));
+        if (!inv) return;
+        const printable = d => ['Finalized', 'Delivered'].includes(d.status);
+        $('result').innerHTML = `<div class="card">
+            <div class="card-header d-flex flex-wrap gap-2 align-items-center"><b>${App.esc(inv.invoiceNo)}</b> ${App.esc(inv.patientName)}
+                <span class="small text-muted">${App.esc(inv.patientCode)} · ${App.esc(inv.patientAge || '')} ${App.esc(inv.gender)} · ${App.dateTime(inv.invoiceDate)}</span></div>
+            <table class="table table-sm mb-0"><thead><tr><th style="width:34px"></th><th>Test</th><th>Group</th><th>Status</th></tr></thead>
+            <tbody>${inv.details.map(d => `<tr><td>${printable(d) ? `<input class="form-check-input" type="checkbox" value="${d.id}" checked>` : ''}</td>
+                <td>${App.esc(d.testName)}</td><td>${App.esc(d.groupName)}</td>
+                <td>${App.status(d.status)} ${d.status === 'Verified' ? '<span class="small text-muted">waiting for pathologist</span>' : ''}</td></tr>`).join('')}</tbody></table>
+            <div class="card-footer d-flex gap-2">
+                ${rights.canPrint ? '<button class="btn btn-primary" id="btnPrint"><i class="bi bi-printer me-1"></i>Print selected</button>' : ''}
+                <a class="btn btn-outline-success ms-auto" href="/Diagnostic/ReportDelivery"><i class="bi bi-box-arrow-up-right me-1"></i>Go to Report Delivery</a>
+            </div></div>`;
+        $('btnPrint')?.addEventListener('click', () => {
+            const ids = [...$('result').querySelectorAll('input:checked')].map(i => i.value);
+            if (!ids.length) { App.toast('No finalized report selected.', 'warning'); return; }
+            App.report(`/api/reports/lab-report/${inv.id}` + App.qs({ detailIds: ids.join(','), letterHead: $('lhMode').value, letterHeadId: $('letterHead').value }));
+        });
+    }
+    $('btnFind').onclick = find;
+    $('invoiceNo').addEventListener('keydown', e => { if (e.key === 'Enter') find(); });
+});
+</script>
+}

@@ -1,0 +1,18 @@
+@{
+    ViewData["Title"] = "Module";
+}
+<div class="empty">Opening module…</div>
+
+@section Scripts {
+<script>
+    App.ready(async () => {
+        const code = '@ViewBag.ProjectCode';
+        const projects = await App.menus();
+        const p = projects.find(x => x.code === code);
+        if (!p) { location.href = '/'; return; }
+        App.setModule(code);
+        const first = p.menus.find(m => m.url);
+        location.replace(first ? first.url : '/');
+    });
+</script>
+}

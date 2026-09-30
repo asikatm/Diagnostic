@@ -1,0 +1,143 @@
+@{
+    ViewData["Title"] = "Result Entry";
+}
+<div class="page-head">
+    <div><h1>Result Entry &amp; Verification</h1></div>
+    <div class="ms-auto d-flex gap-2 flex-wrap align-items-center">
+        <input type="date" class="form-control form-control-sm" id="from" style="width:140px">
+        <input type="date" class="form-control form-control-sm" id="to" style="width:140px">
+        <select class="form-select form-select-sm" id="status" style="width:160px">
+            <option value="">All status</option><option>Ordered</option><option>SampleCollected</option><option>SampleReceived</option>
+            <option>ResultEntered</option><option>Verified</option><option>Finalized</option><option>Delivered</option><option value="SampleRejected">Sample rejected</option>
+        </select>
+        <select class="form-select form-select-sm" id="group" style="width:170px"></select>
+        <input class="form-control form-control-sm" id="search" placeholder="Invoice / sample / patient" style="width:190px">
+        <button class="btn btn-primary btn-sm" id="btnLoad"><i class="bi bi-search"></i></button>
+    </div>
+</div>
+<div class="row g-3">
+    <div class="col-xl-5">
+        <div class="card">
+            <div class="table-responsive" style="max-height:calc(100vh - 190px)"><table class="table table-sm table-hover">
+                <thead class="sticky-top"><tr><th>Invoice</th><th>Patient</th><th>Test</th><th>Status</th></tr></thead>
+                <tbody id="work"></tbody></table></div>
+        </div>
+    </div>
+    <div class="col-xl-7"><div id="entry"><div class="card"><div class="empty">Select a test from the worklist.</div></div></div></div>
+</div>
+
+@section Scripts {
+<script>
+App.ready(async () => {
+    const $ = id => document.getElementById(id);
+    const q = new URLSearchParams(location.search);
+    $('from').value = $('to').value = App.isoDate();
+    $('status').value = q.get('status') || '';
+    const [lookups, rights] = await Promise.all([App.api('/api/diag/lookups/billing'), App.rights()]);
+    $('group').innerHTML = App.options(lookups.testGroups, '', 'All groups');
+    let currentId = null;
+
+    async function loadWork() {
+        const list = await App.run(() => App.api('/api/diag/results/worklist' + App.qs({
+            from: $('from').value, to: $('to').value, status: $('status').value, testGroupId: $('group').value, search: $('search').value.trim() })));
+        if (!list) return;
+        $('work').innerHTML = list.length ? list.map(w => `<tr data-id="${w.detailId}" style="cursor:pointer" class="${w.detailId === currentId ? 'table-active' : ''}">
+            <td><div class="fw-semibold">${App.esc(w.invoiceNo)}</div><div class="small text-muted">${App.esc(w.sampleNo || '')}</div></td>
+            <td>${App.esc(w.patientName)}<div class="small text-muted">${App.esc(w.patientAge || '')} ${App.esc(w.gender)}</div></td>
+            <td>${App.esc(w.testName)}<div class="small text-muted">${App.esc(w.groupName)}</div></td>
+            <td>${App.status(w.status)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty">Nothing in the worklist.</td></tr>';
+    }
+
+    function flagFor(p, v) {
+        if (p.inputType !== 'Numeric' || v === '' || isNaN(Number(v))) return 'Normal';
+        const n = Number(v);
+        if (p.lowValue != null && n < p.lowValue) return 'Low';
+        if (p.highValue != null && n > p.highValue) return 'High';
+        return 'Normal';
+    }
+
+    async function open(id) {
+        currentId = id;
+        document.querySelectorAll('#work tr').forEach(tr => tr.classList.toggle('table-active', Number(tr.dataset.id) === id));
+        const d = await App.run(() => App.api('/api/diag/results/' + id));
+        if (!d) return;
+        const locked = ['Verified', 'Finalized', 'Delivered', 'Cancelled'].includes(d.status);
+        const waiting = d.status === 'Ordered' && d.resultType === 'Parameter';
+        let lastHeading = null;
+        const paramRows = d.parameters.map(p => {
+            const head = p.groupHeading && p.groupHeading !== lastHeading ? `<tr><td colspan="4" class="fw-bold small pt-2 text-decoration-underline">${App.esc(p.groupHeading)}</td></tr>` : '';
+            lastHeading = p.groupHeading;
+            const val = App.esc(p.value ?? '');
+            const inp = p.inputType === 'Option'
+                ? `<select class="form-select form-select-sm" data-p="${p.parameterId}" ${locked ? 'disabled' : ''}><option></option>${p.options.map(o => `<option ${o === p.value ? 'selected' : ''}>${App.esc(o)}</option>`).join('')}</select>`
+                : `<input class="form-control form-control-sm" data-p="${p.parameterId}" value="${val}" ${locked ? 'disabled' : ''} ${p.inputType === 'Numeric' ? 'inputmode="decimal"' : ''}>`;
+            return `${head}<tr><td class="${p.groupHeading ? 'ps-3' : ''}">${App.esc(p.name)}</td><td style="width:170px">${inp}</td>
+                <td class="small text-muted">${App.esc(p.unit || '')}</td><td class="small">${App.esc(p.normalRange || '')} <span data-flag="${p.parameterId}"></span></td></tr>`;
+        }).join('');
+
+        $('entry').innerHTML = `<div class="card">
+            <div class="card-header d-flex flex-wrap gap-2 align-items-center">
+                <span class="fw-bold">${App.esc(d.testName)}</span> ${App.status(d.status)}
+                <span class="ms-auto small text-muted">${App.esc(d.invoiceNo)} · ${App.esc(d.sampleNo || 'no sample')}</span></div>
+            <div class="card-body">
+                <div class="small mb-2"><b>${App.esc(d.patientName)}</b> (${App.esc(d.patientCode)}) · ${App.esc(d.patientAge || '')} ${App.esc(d.gender)} · Ref: ${App.esc(d.referDoctor || 'Self')}</div>
+                ${waiting ? '<div class="alert alert-warning py-2 small">Sample is not collected yet.</div>' : ''}
+                ${d.returnReason ? `<div class="alert alert-danger py-2 small"><i class="bi bi-arrow-return-left me-1"></i><b>Returned by pathologist:</b> ${App.esc(d.returnReason)}</div>` : ''}
+                ${d.status === 'Finalized' || d.status === 'Delivered' ? '<div class="alert alert-success py-2 small"><i class="bi bi-patch-check me-1"></i>Finalized by the pathologist – locked.</div>' : ''}
+                ${d.resultType === 'Parameter'
+                    ? `<table class="table table-sm"><thead><tr><th>Parameter</th><th>Result</th><th>Unit</th><th>Reference</th></tr></thead><tbody>${paramRows || '<tr><td colspan="4" class="text-muted">No parameter is set up for this test (see REPORT PARAMETER).</td></tr>'}</tbody></table>`
+                    : `<label class="form-label">Report / findings</label><textarea class="form-control font-monospace" rows="12" id="reportText" ${locked ? 'disabled' : ''}>${App.esc(d.reportText || '')}</textarea>`}
+                <div class="row g-2 mt-1">
+                    <div class="col-md-8"><label class="form-label">Comments</label><input class="form-control" id="comments" value="${App.esc(d.comments || '')}" ${locked ? 'disabled' : ''}></div>
+                    <div class="col-md-4"><label class="form-label">Signed by</label><select class="form-select" id="signDoctor" ${locked ? 'disabled' : ''}>${App.options(lookups.signDoctors, d.signDoctorId, '-- Doctor --')}</select></div>
+                </div>
+            </div>
+            <div class="card-footer d-flex gap-2 flex-wrap">
+                ${!locked && rights.canEdit ? `<button class="btn btn-outline-primary" data-act="save"><i class="bi bi-save me-1"></i>Save</button>` : ''}
+                ${!locked && rights.canEdit ? `<button class="btn btn-primary" data-act="saveVerify"><i class="bi bi-patch-check me-1"></i>Save &amp; Verify</button>` : ''}
+                ${d.status === 'Verified' && rights.canEdit ? `<button class="btn btn-outline-danger" data-act="unverify"><i class="bi bi-arrow-counterclockwise me-1"></i>Un-verify</button>` : ''}
+                ${['Verified', 'Finalized', 'Delivered'].includes(d.status) ? `<button class="btn btn-outline-secondary ms-auto" data-act="print"><i class="bi bi-printer me-1"></i>${d.status === 'Verified' ? 'Preview' : 'Print'} report</button>` : ''}
+            </div></div>`;
+
+        const paint = () => d.parameters.forEach(p => {
+            const el = $('entry').querySelector(`[data-p="${p.parameterId}"]`);
+            const f = flagFor(p, el.value.trim());
+            const span = $('entry').querySelector(`[data-flag="${p.parameterId}"]`);
+            span.className = 'flag-' + f; span.textContent = f === 'Normal' ? '' : (f === 'High' ? '▲ H' : '▼ L');
+            el.classList.toggle('flag-' + 'High', f === 'High'); el.classList.toggle('flag-Low', f === 'Low');
+        });
+        if (d.resultType === 'Parameter') { paint(); $('entry').oninput = paint; }
+        $('entry').querySelector('[data-p]')?.focus();
+        // Enter moves to the next result box
+        $('entry').querySelectorAll('[data-p]').forEach((el, i, all) => el.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); (all[i + 1] || $('comments')).focus(); }
+        }));
+
+        $('entry').querySelector('.card-footer').onclick = e => {
+            const b = e.target.closest('[data-act]'); if (!b) return;
+            const act = b.dataset.act;
+            if (act === 'print') { App.report(`/api/reports/lab-report/${d.investigationId}?detailIds=${d.detailId}&preview=${d.status === 'Verified'}`); return; }
+            App.run(async () => {
+                if (act === 'unverify') await App.api(`/api/diag/results/${id}/unverify`, { method: 'POST' });
+                else {
+                    if (act === 'saveVerify' && !$('signDoctor').value) throw new Error('Select the doctor who signs the report.');
+                    await App.api('/api/diag/results/' + id, { method: 'PUT', body: {
+                        results: [...$('entry').querySelectorAll('[data-p]')].map(el => ({ parameterId: Number(el.dataset.p), value: el.value.trim() || null })),
+                        reportText: $('reportText')?.value ?? null, comments: $('comments').value.trim() || null,
+                        signDoctorId: Number($('signDoctor').value) || null, verify: act === 'saveVerify' } });
+                }
+                App.toast(act === 'save' ? 'Result saved.' : act === 'saveVerify' ? 'Result saved and verified.' : 'Report un-verified.');
+                await loadWork();
+                open(id);
+            }, b);
+        };
+    }
+
+    $('work').addEventListener('click', e => { const tr = e.target.closest('tr[data-id]'); if (tr) open(Number(tr.dataset.id)); });
+    $('btnLoad').onclick = loadWork;
+    ['status', 'group', 'from', 'to'].forEach(id => $(id).onchange = loadWork);
+    $('search').addEventListener('keydown', e => { if (e.key === 'Enter') loadWork(); });
+    loadWork();
+});
+</script>
+}

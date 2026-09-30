@@ -1,0 +1,82 @@
+@{
+    ViewData["Title"] = "Dashboard";
+}
+<div class="page-head">
+    <div><h1>Diagnostic Dashboard</h1><div class="sub" id="range"></div></div>
+    <div class="ms-auto d-flex gap-2 align-items-center">
+        <input type="date" class="form-control form-control-sm" id="from">
+        <span class="text-muted">to</span>
+        <input type="date" class="form-control form-control-sm" id="to">
+        <button class="btn btn-primary btn-sm" id="btnLoad"><i class="bi bi-arrow-repeat"></i></button>
+    </div>
+</div>
+
+<div class="kpis mb-3" id="money"></div>
+
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="card h-100">
+            <div class="card-header">Last 7 days – net billing</div>
+            <div class="card-body"><div class="bars" id="bars"></div></div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card h-100">
+            <div class="card-header">Work status (all open tests)</div>
+            <div class="card-body"><div class="kpis" id="work" style="grid-template-columns:repeat(2,1fr)"></div></div>
+        </div>
+    </div>
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">Test group wise income</div>
+            <div class="table-responsive"><table class="table table-sm">
+                <thead><tr><th>Test Group</th><th class="text-end">Tests</th><th class="text-end">Net Amount</th><th style="width:40%"></th></tr></thead>
+                <tbody id="groups"></tbody></table></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+App.ready(() => {
+    const $ = id => document.getElementById(id);
+    $('from').value = $('to').value = App.isoDate();
+    const kpi = (label, value, hint = '', href = '') =>
+        `<${href ? `a href="${href}" class="kpi link"` : 'div class="kpi"'}><div class="label">${label}</div><div class="value">${value}</div><div class="hint">${hint}</div></${href ? 'a' : 'div'}>`;
+
+    async function load() {
+        const d = await App.run(() => App.api('/api/diag/dashboard' + App.qs({ from: $('from').value, to: $('to').value })));
+        if (!d) return;
+        $('range').textContent = $('from').value === $('to').value ? App.date($('from').value) : `${App.date($('from').value)} – ${App.date($('to').value)}`;
+        $('money').innerHTML = [
+            kpi('Invoices', d.invoiceCount, `${d.patientCount} patient(s)`, '/Diagnostic/Invoices'),
+            kpi('Gross', App.money(d.grossAmount)),
+            kpi('Discount', App.money(d.discountAmount)),
+            kpi('Net billing', App.money(d.netAmount)),
+            kpi('Collection', App.money(d.collection), d.refund ? `Refund ${App.money(d.refund)}` : ''),
+            kpi('Due (period)', App.money(d.todayDue), `All-time due ${App.money(d.totalDue)}`, '/Diagnostic/Invoices?due=1'),
+        ].join('');
+        $('work').innerHTML = [
+            kpi('Waiting for sample', d.pendingSample, '', '/Diagnostic/SampleCollection'),
+            kpi('Waiting for result', d.pendingResult, '', '/Diagnostic/ResultEntry'),
+            kpi('Waiting for verify', d.pendingVerify, '', '/Diagnostic/ResultEntry?status=ResultEntered'),
+            kpi('Waiting for finalization', d.pendingFinalize, 'pathologist', '/Diagnostic/ReportFinalization'),
+            kpi('Ready to deliver', d.readyToDeliver, 'finalized', '/Diagnostic/ReportDelivery'),
+            kpi('Cancel requests', d.pendingCancel, 'pending approval', '/Diagnostic/ApproveCancel'),
+        ].join('');
+        const max = Math.max(1, ...d.last7Days.map(x => x.netAmount));
+        $('bars').innerHTML = d.last7Days.map(x => `<div class="bar-col" title="${x.invoices} invoice(s), collection ${App.money(x.collection)}">
+            <div class="bar-val">${x.netAmount ? Math.round(x.netAmount).toLocaleString() : ''}</div>
+            <div class="bar" style="height:${(x.netAmount / max) * 130}px"></div>
+            <div class="bar-label">${App.date(x.date).slice(0, 6)}</div></div>`).join('');
+        const gmax = Math.max(1, ...d.testGroups.map(g => g.amount));
+        $('groups').innerHTML = d.testGroups.length ? d.testGroups.map(g => `<tr><td>${App.esc(g.groupName)}</td><td class="text-end">${g.tests}</td>
+            <td class="money">${App.money(g.amount)}</td>
+            <td><div class="bar" style="height:8px;border-radius:4px;max-width:none;width:${(g.amount / gmax) * 100}%"></div></td></tr>`).join('')
+            : '<tr><td colspan="4" class="empty">No billing in this period.</td></tr>';
+    }
+    $('btnLoad').onclick = load;
+    load();
+});
+</script>
+}

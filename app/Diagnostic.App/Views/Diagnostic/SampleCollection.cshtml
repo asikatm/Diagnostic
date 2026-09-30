@@ -1,0 +1,225 @@
+@{
+    ViewData["Title"] = "Sample Collection";
+}
+<div class="page-head">
+    <div><h1>Sample Collection</h1><div class="sub">Collect → dispatch to lab. Tubes rejected by the lab come back under Repeat Sample.</div></div>
+    <div class="ms-auto d-flex gap-2 align-items-center">
+        <div class="form-check form-switch mb-0 me-2"><input class="form-check-input" type="checkbox" id="autoSticker"><label class="form-check-label small" for="autoSticker">Print sticker on collect</label></div>
+        <input type="date" class="form-control form-control-sm" id="date" style="width:150px">
+        <input class="form-control form-control-sm" id="invoiceNo" placeholder="Invoice / sample no" style="width:170px">
+        <button class="btn btn-primary btn-sm" id="btnLoad"><i class="bi bi-search"></i></button>
+    </div>
+</div>
+
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabPending">Pending Collection <span class="badge text-bg-warning" id="cPending"></span></button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabDispatch">Sample Dispatch <span class="badge text-bg-info" id="cDispatch"></span></button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabRepeat">Repeat Sample <span class="badge text-bg-danger" id="cRepeat"></span></button></li>
+</ul>
+
+<div class="tab-content">
+    <!-- ================= Pending collection ================= -->
+    <div class="tab-pane fade show active" id="tabPending">
+        <div class="d-flex align-items-center gap-3 mb-2">
+            <label class="form-check mb-0"><input class="form-check-input" type="checkbox" id="pendAll"> <span class="form-check-label">Select all</span></label>
+            <span class="small text-muted" id="pendSel"></span>
+            <button class="btn btn-primary btn-sm ms-auto" id="btnCollectSel" data-need="add"><i class="bi bi-droplet me-1"></i>Collect selected</button>
+        </div>
+        <div id="pending"></div>
+    </div>
+
+    <!-- ================= Dispatch ================= -->
+    <div class="tab-pane fade" id="tabDispatch">
+        <div class="card">
+            <div class="card-header d-flex align-items-center gap-3">
+                <span>Collected – not yet sent to lab</span>
+                <span class="small text-muted" id="dispSel"></span>
+                <button class="btn btn-primary btn-sm ms-auto" id="btnDispatchSel" data-need="edit"><i class="bi bi-send me-1"></i>Dispatch selected</button>
+            </div>
+            <div class="table-responsive"><table class="table table-sm table-hover">
+                <thead><tr><th style="width:34px"><input class="form-check-input" type="checkbox" id="dispAll"></th><th>Sample No</th><th>Invoice</th><th>Patient</th><th>Tube</th><th>Tests</th><th>Collected</th><th></th></tr></thead>
+                <tbody id="dispatch"></tbody></table></div>
+        </div>
+        <div class="card mt-3">
+            <div class="card-header">Dispatched / acknowledged (selected date)</div>
+            <div class="table-responsive"><table class="table table-sm">
+                <thead><tr><th>Sample No</th><th>Invoice</th><th>Patient</th><th>Tube</th><th>Tests</th><th>Dispatched</th><th>Acknowledged</th><th>Status</th></tr></thead>
+                <tbody id="sent"></tbody></table></div>
+        </div>
+    </div>
+
+    <!-- ================= Repeat ================= -->
+    <div class="tab-pane fade" id="tabRepeat">
+        <div class="card">
+            <div class="card-header d-flex align-items-center gap-3">
+                <span>Rejected by the lab – collect a new sample</span>
+                <span class="small text-muted" id="repSel"></span>
+                <button class="btn btn-danger btn-sm ms-auto" id="btnRepeatSel" data-need="add"><i class="bi bi-arrow-repeat me-1"></i>Collect repeat for selected</button>
+            </div>
+            <div class="table-responsive"><table class="table table-sm table-hover">
+                <thead><tr><th style="width:34px"><input class="form-check-input" type="checkbox" id="repAll"></th><th>Rejected Sample</th><th>Invoice</th><th>Patient</th><th>Tube</th><th>Tests</th><th>Rejected</th><th>Reason</th><th></th></tr></thead>
+                <tbody id="repeat"></tbody></table></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+App.ready(async () => {
+    const $ = id => document.getElementById(id);
+    const rights = await App.rights();
+    if (!rights.canAdd) document.querySelectorAll('[data-need=add]').forEach(b => b.classList.add('d-none'));
+    if (!rights.canEdit) document.querySelectorAll('[data-need=edit]').forEach(b => b.classList.add('d-none'));
+    $('date').value = App.isoDate();
+    $('invoiceNo').value = new URLSearchParams(location.search).get('invoiceNo') || '';
+    $('autoSticker').checked = App.store.get('diag.autoSticker') ?? true;
+    $('autoSticker').onchange = e => App.store.set('diag.autoSticker', e.target.checked);
+    const search = () => $('invoiceNo').value.trim();
+    const tube = (name, color) => name ? `<span class="chip"><span class="dot" style="background:${App.esc(color)}"></span>${App.esc(name)}</span>` : '<span class="text-muted small">not mapped</span>';
+    const printStickers = samples => { if ($('autoSticker').checked && samples.length) App.report('/api/reports/sticker?sampleIds=' + samples.map(s => s.id).join(',')); };
+
+    // Checkbox helpers: "select all" + selected counter for a container
+    function selection(containerId, allId, counterId, label) {
+        const boxes = () => [...$(containerId).querySelectorAll('input[data-sel]')];
+        const update = () => {
+            const sel = boxes().filter(b => b.checked);
+            $(counterId).textContent = sel.length ? `${sel.length} ${label} selected` : '';
+            $(allId).checked = sel.length > 0 && sel.length === boxes().length;
+        };
+        $(allId).onchange = e => { boxes().forEach(b => b.checked = e.target.checked); $(containerId).querySelectorAll('input[data-inv-all]').forEach(b => b.checked = e.target.checked); update(); };
+        $(containerId).addEventListener('change', e => {
+            if (e.target.dataset.invAll) $(containerId).querySelectorAll(`input[data-sel][data-inv="${e.target.dataset.invAll}"]`).forEach(b => b.checked = e.target.checked);
+            update();
+        });
+        return { ids: () => boxes().filter(b => b.checked).map(b => Number(b.value)), update };
+    }
+    const pendSel = selection('pending', 'pendAll', 'pendSel', 'test(s)');
+    const dispSel = selection('dispatch', 'dispAll', 'dispSel', 'sample(s)');
+    const repSel = selection('repeat', 'repAll', 'repSel', 'sample(s)');
+
+    // ---------------------------------------------------------- pending collection
+    async function loadPending() {
+        const list = await App.run(() => App.api('/api/diag/samples/pending' + App.qs({ invoiceNo: search(), date: $('date').value })));
+        if (!list) return;
+        let open = 0;
+        $('pending').innerHTML = list.length ? list.map(inv => {
+            const pend = inv.tests.filter(t => t.status === 'Ordered');
+            open += pend.length;
+            return `<div class="card mb-2"><div class="card-header d-flex align-items-center flex-wrap gap-2">
+                ${pend.length ? `<input class="form-check-input mt-0" type="checkbox" data-inv-all="${inv.investigationId}" title="Select all tests of this invoice">` : ''}
+                <b>${App.esc(inv.invoiceNo)}</b><span>${App.esc(inv.patientName)}</span>
+                <span class="text-muted small">${App.esc(inv.patientCode)} · ${App.esc(inv.patientAge || '')} ${App.esc(inv.gender)} · ${App.dateTime(inv.invoiceDate)}</span>
+                <span class="ms-auto d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" data-sticker="${inv.investigationId}"><i class="bi bi-upc me-1"></i>Stickers</button>
+                    ${pend.length && rights.canAdd ? `<button class="btn btn-sm btn-primary" data-collect-inv="${inv.investigationId}"><i class="bi bi-droplet me-1"></i>Collect all (${pend.length})</button>` : ''}
+                </span></div>
+                <table class="table table-sm mb-0"><tbody>${inv.tests.map(t => `<tr>
+                    <td style="width:34px">${t.status === 'Ordered' ? `<input class="form-check-input" type="checkbox" data-sel data-inv="${inv.investigationId}" value="${t.detailId}">` : ''}</td>
+                    <td>${App.esc(t.testName)} <span class="text-muted small">${App.esc(t.groupName)}</span></td>
+                    <td>${tube(t.vacutainerName, t.colorHex)}</td><td class="small">${App.esc(t.specimen || '')}</td>
+                    <td>${App.esc(t.sampleNo || '')}</td><td>${App.status(t.status)}</td>
+                    <td class="text-end" style="width:90px">${t.status === 'Ordered' && rights.canAdd ? `<button class="btn btn-sm btn-outline-primary py-0" data-collect-one="${t.detailId}">Collect</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+        }).join('') : '<div class="empty">No pending sample for this date. Search an invoice number to see its samples.</div>';
+        $('cPending').textContent = open || '';
+        pendSel.update();
+    }
+
+    async function collect(body, btn) {
+        await App.run(async () => {
+            const samples = await App.api('/api/diag/samples/collect', { method: 'POST', body });
+            App.toast(`Collected ${samples.length} tube(s): ${samples.map(s => s.sampleNo).join(', ')}`);
+            printStickers(samples);
+            loadAll();
+        }, btn);
+    }
+    $('btnCollectSel').onclick = e => {
+        const ids = pendSel.ids();
+        if (!ids.length) { App.toast('Select at least one test.', 'warning'); return; }
+        collect({ detailIds: ids }, e.currentTarget);
+    };
+
+    // ---------------------------------------------------------- dispatch
+    async function loadDispatch() {
+        const list = await App.run(() => App.api('/api/diag/samples' + App.qs({ status: 'Collected', search: search() })));
+        if (!list) return;
+        $('cDispatch').textContent = list.length || '';
+        $('dispatch').innerHTML = list.length ? list.map(s => `<tr>
+            <td><input class="form-check-input" type="checkbox" data-sel value="${s.id}"></td>
+            <td class="fw-semibold">${App.esc(s.sampleNo)} ${s.repeatOfSampleNo ? `<span class="chip text-danger" title="Repeat of ${App.esc(s.repeatOfSampleNo)}">Repeat</span>` : ''}</td>
+            <td>${App.esc(s.invoiceNo)}</td><td>${App.esc(s.patientName)}</td><td>${tube(s.vacutainer, s.colorHex)}</td>
+            <td class="small">${App.esc(s.tests)}</td><td class="small">${App.dateTime(s.collectedAt)}</td>
+            <td class="text-end text-nowrap">
+                ${rights.canEdit ? `<button class="btn btn-sm btn-outline-primary py-0" data-dispatch-one="${s.id}"><i class="bi bi-send"></i> Dispatch</button>` : ''}
+                <button class="btn btn-sm btn-outline-secondary py-0" data-one="${s.id}" title="Reprint sticker"><i class="bi bi-upc"></i></button></td></tr>`).join('')
+            : '<tr><td colspan="8" class="empty">Nothing waiting for dispatch.</td></tr>';
+        dispSel.update();
+
+        const sent = await App.api('/api/diag/samples' + App.qs({ date: $('date').value, search: search() })).catch(() => []);
+        const done = sent.filter(s => s.status !== 'Collected');
+        $('sent').innerHTML = done.length ? done.map(s => `<tr><td class="fw-semibold">${App.esc(s.sampleNo)}</td><td>${App.esc(s.invoiceNo)}</td>
+            <td>${App.esc(s.patientName)}</td><td>${tube(s.vacutainer, s.colorHex)}</td><td class="small">${App.esc(s.tests)}</td>
+            <td class="small">${App.dateTime(s.dispatchedAt)}</td><td class="small">${App.dateTime(s.receivedAt)}</td>
+            <td>${App.status(s.status)} ${s.rejectReason ? `<div class="small text-danger">${App.esc(s.rejectReason)}</div>` : ''}</td></tr>`).join('')
+            : '<tr><td colspan="8" class="empty">None.</td></tr>';
+    }
+    async function dispatch(ids, btn) {
+        await App.run(async () => {
+            const res = await App.api('/api/diag/samples/dispatch', { method: 'POST', body: { sampleIds: ids } });
+            App.toast(`${res.length} sample(s) dispatched to lab.`);
+            loadDispatch();
+        }, btn);
+    }
+    $('btnDispatchSel').onclick = e => {
+        const ids = dispSel.ids();
+        if (!ids.length) { App.toast('Select samples to dispatch.', 'warning'); return; }
+        dispatch(ids, e.currentTarget);
+    };
+
+    // ---------------------------------------------------------- repeat
+    async function loadRepeat() {
+        const list = await App.run(() => App.api('/api/diag/samples/repeat' + App.qs({ search: search() })));
+        if (!list) return;
+        $('cRepeat').textContent = list.length || '';
+        $('repeat').innerHTML = list.length ? list.map(s => `<tr>
+            <td><input class="form-check-input" type="checkbox" data-sel value="${s.id}"></td>
+            <td class="fw-semibold">${App.esc(s.sampleNo)}</td><td>${App.esc(s.invoiceNo)}</td>
+            <td>${App.esc(s.patientName)} <span class="small text-muted">${App.esc(s.patientAge || '')} ${App.esc(s.gender)}</span></td>
+            <td>${tube(s.vacutainer, s.colorHex)}</td><td class="small">${App.esc(s.tests)}</td>
+            <td class="small">${App.dateTime(s.rejectedAt)}</td><td class="small text-danger">${App.esc(s.rejectReason || '')}</td>
+            <td class="text-end">${rights.canAdd ? `<button class="btn btn-sm btn-outline-danger py-0" data-repeat-one="${s.id}"><i class="bi bi-arrow-repeat"></i> Recollect</button>` : ''}</td></tr>`).join('')
+            : '<tr><td colspan="9" class="empty">No rejected sample waiting.</td></tr>';
+        repSel.update();
+    }
+    async function recollect(ids, btn) {
+        await App.run(async () => {
+            const samples = await App.api('/api/diag/samples/repeat', { method: 'POST', body: { sampleIds: ids } });
+            App.toast(`Repeat collected: ${samples.map(s => s.sampleNo).join(', ')}`);
+            printStickers(samples);
+            loadAll();
+        }, btn);
+    }
+    $('btnRepeatSel').onclick = e => {
+        const ids = repSel.ids();
+        if (!ids.length) { App.toast('Select rejected samples.', 'warning'); return; }
+        recollect(ids, e.currentTarget);
+    };
+
+    // ---------------------------------------------------------- shared
+    document.querySelector('.tab-content').addEventListener('click', e => {
+        const b = e.target.closest('button'); if (!b) return;
+        if (b.dataset.sticker) App.report('/api/reports/sticker?investigationId=' + b.dataset.sticker);
+        if (b.dataset.one) App.report('/api/reports/sticker?sampleId=' + b.dataset.one);
+        if (b.dataset.collectInv) collect({ investigationId: Number(b.dataset.collectInv) }, b);
+        if (b.dataset.collectOne) collect({ detailIds: [Number(b.dataset.collectOne)] }, b);
+        if (b.dataset.dispatchOne) dispatch([Number(b.dataset.dispatchOne)], b);
+        if (b.dataset.repeatOne) recollect([Number(b.dataset.repeatOne)], b);
+    });
+
+    function loadAll() { loadPending(); loadDispatch(); loadRepeat(); }
+    $('btnLoad').onclick = loadAll;
+    $('invoiceNo').addEventListener('keydown', e => { if (e.key === 'Enter') loadAll(); });
+    $('date').onchange = loadAll;
+    loadAll();
+});
+</script>
+}

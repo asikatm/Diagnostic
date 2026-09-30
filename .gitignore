@@ -1,0 +1,14 @@
+# Build output / IDE
+bin/
+obj/
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Local secrets (database password, JWT key) – see appsettings.Development.example.json
+appsettings.Development.json
+appsettings.*.local.json
+
+# Misc
+*.log

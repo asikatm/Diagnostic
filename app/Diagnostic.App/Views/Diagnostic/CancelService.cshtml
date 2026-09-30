@@ -1,0 +1,83 @@
+@{
+    ViewData["Title"] = "Cancel Service";
+}
+<div class="page-head">
+    <div><h1>Cancel Service</h1><div class="sub">Request cancellation of tests or a whole invoice. It takes effect after approval.</div></div>
+    <div class="ms-auto d-flex gap-2">
+        <input class="form-control form-control-sm" id="invoiceNo" placeholder="Invoice no" style="width:200px" autofocus>
+        <button class="btn btn-primary btn-sm" id="btnFind"><i class="bi bi-search me-1"></i>Find</button>
+    </div>
+</div>
+<div id="result"></div>
+<div class="card mt-3">
+    <div class="card-header">Recent cancel requests</div>
+    <div class="table-responsive"><table class="table table-sm">
+        <thead><tr><th>Date</th><th>Invoice</th><th>Patient</th><th>Test</th><th>Reason</th><th class="text-end">Refund</th><th>Status</th><th>Remarks</th></tr></thead>
+        <tbody id="history"></tbody></table></div>
+</div>
+
+@section Scripts {
+<script>
+App.ready(() => {
+    const $ = id => document.getElementById(id);
+
+    async function find() {
+        const no = $('invoiceNo').value.trim(); if (!no) return;
+        const inv = await App.run(() => App.api('/api/diag/investigations/by-no/' + encodeURIComponent(no)));
+        if (!inv) return;
+        const cancellable = d => !['Verified', 'Delivered', 'Cancelled'].includes(d.status);
+        const paid = inv.paidAmount - inv.refundAmount;
+        $('result').innerHTML = `<div class="card">
+            <div class="card-header"><b>${App.esc(inv.invoiceNo)}</b> ${App.esc(inv.patientName)} · Net ${App.money(inv.netAmount)} · Paid ${App.money(paid)} ${App.status(inv.status)}</div>
+            <table class="table table-sm mb-0"><thead><tr><th style="width:34px"></th><th>Test</th><th>Status</th><th class="text-end">Net</th></tr></thead>
+            <tbody>${inv.details.map(d => `<tr><td>${cancellable(d) ? `<input class="form-check-input" type="checkbox" value="${d.id}" data-net="${d.netAmount}">` : ''}</td>
+                <td>${App.esc(d.testName)}</td><td>${App.status(d.status)}</td><td class="money">${App.money(d.netAmount)}</td></tr>`).join('')}</tbody></table>
+            <div class="card-body row g-2 align-items-end">
+                <div class="col-md-6"><label class="form-label required">Reason</label><input class="form-control" id="reason"></div>
+                <div class="col-md-3"><label class="form-label">Refund amount <span class="text-muted" id="maxRefund"></span></label><input type="number" min="0" class="form-control" id="refund" value="0"></div>
+                <div class="col-md-3 d-flex gap-2">
+                    <button class="btn btn-danger flex-fill" id="btnSel">Cancel selected</button>
+                    <button class="btn btn-outline-danger" id="btnAll" title="Cancel the whole invoice">Whole invoice</button>
+                </div>
+            </div></div>`;
+
+        const selected = () => [...$('result').querySelectorAll('input[type=checkbox]:checked')];
+        const updateMax = () => {
+            const cancelled = selected().reduce((s, i) => s + Number(i.dataset.net), 0);
+            const max = Math.max(0, paid - (inv.netAmount - cancelled));
+            $('maxRefund').textContent = `(max ${App.money(max)})`;
+            $('refund').value = max;
+        };
+        $('result').addEventListener('change', e => { if (e.target.type === 'checkbox') updateMax(); });
+        updateMax();
+
+        const submit = (detailIds, btn) => App.run(async () => {
+            const reason = $('reason').value.trim();
+            if (!reason) { $('reason').focus(); throw new Error('Reason is required.'); }
+            if (detailIds && !detailIds.length) throw new Error('Select test(s) to cancel.');
+            await App.api('/api/diag/cancel-requests', { method: 'POST', body: { investigationId: inv.id, detailIds, reason, refundAmount: Number($('refund').value || 0) } });
+            App.toast('Cancel request submitted for approval.');
+            $('result').innerHTML = ''; loadHistory();
+        }, btn);
+        $('btnSel').onclick = e => submit(selected().map(i => Number(i.value)), e.currentTarget);
+        $('btnAll').onclick = async e => {
+            if (!await App.confirmBox('Request cancellation of the whole invoice?', 'Yes, cancel invoice')) return;
+            $('refund').value = paid;
+            submit(null, e.currentTarget);
+        };
+    }
+
+    async function loadHistory() {
+        const from = new Date(); from.setDate(from.getDate() - 7);
+        const list = await App.api('/api/diag/cancel-requests' + App.qs({ from: App.isoDate(from) })).catch(e => { App.toast(e.message, 'danger'); return []; });
+        $('history').innerHTML = list.length ? list.map(c => `<tr><td class="small">${App.dateTime(c.requestedAt)}</td><td>${App.esc(c.invoiceNo)}</td><td>${App.esc(c.patientName)}</td>
+            <td>${App.esc(c.testName || 'Full invoice')}</td><td>${App.esc(c.reason)}</td><td class="money">${App.money(c.refundAmount)}</td>
+            <td>${App.status(c.status)}</td><td class="small">${App.esc(c.approvalRemarks || '')}</td></tr>`).join('')
+            : '<tr><td colspan="8" class="empty">No request in the last 7 days.</td></tr>';
+    }
+    $('btnFind').onclick = find;
+    $('invoiceNo').addEventListener('keydown', e => { if (e.key === 'Enter') find(); });
+    loadHistory();
+});
+</script>
+}

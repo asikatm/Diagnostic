@@ -1,0 +1,65 @@
+@inject IConfiguration Config
+@{
+    Layout = null;
+    var appName = Config["AppSettings:AppName"] ?? "HIS ERP";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login - @appName</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/lib/bootstrap-icons/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <script>
+        window.APP = { apiBase: '@Config["AppSettings:ApiBaseUrl"]', reportBase: '@Config["AppSettings:ReportBaseUrl"]', appName: '@appName', noShell: true };
+    </script>
+</head>
+<body>
+<div class="login-wrap">
+    <form class="login-card" id="loginForm" autocomplete="on">
+        <div class="text-center mb-4">
+            <div class="brand-logo mx-auto mb-2" style="background:#e7f0f5;color:#0b4f71;width:52px;height:52px;font-size:1.6rem"><i class="bi bi-heart-pulse"></i></div>
+            <h1 class="h5 fw-bold mb-0" style="color:#0b4f71">@appName</h1>
+            <div class="text-muted small">Healthcare Information System</div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label" for="userName">User name</label>
+            <input class="form-control" id="userName" autocomplete="username" required autofocus>
+        </div>
+        <div class="mb-3">
+            <label class="form-label" for="password">Password</label>
+            <input class="form-control" id="password" type="password" autocomplete="current-password" required>
+        </div>
+        <div class="alert alert-danger py-2 small d-none" id="loginError"></div>
+        <button class="btn btn-primary w-100 py-2" id="btnLogin" type="submit">Sign in</button>
+    </form>
+</div>
+<div class="toast-container position-fixed top-0 end-0 p-3" id="toasts"></div>
+<script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+<script src="~/js/app.js" asp-append-version="true"></script>
+<script>
+    document.getElementById('loginForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const err = document.getElementById('loginError');
+        err.classList.add('d-none');
+        await App.run(async () => {
+            try {
+                const res = await App.api('/api/auth/login', {
+                    method: 'POST',
+                    body: { userName: document.getElementById('userName').value.trim(), password: document.getElementById('password').value },
+                });
+                App.store.del(App.KEY.menus);
+                App.store.set(App.KEY.user, res);
+                const back = new URLSearchParams(location.search).get('returnUrl');
+                location.href = back && back.startsWith('/') && !back.startsWith('//') && !back.startsWith('/Home/Login') ? back : '/';
+            } catch (ex) {
+                err.textContent = ex.message;
+                err.classList.remove('d-none');
+            }
+        }, document.getElementById('btnLogin'));
+    });
+</script>
+</body>
+</html>

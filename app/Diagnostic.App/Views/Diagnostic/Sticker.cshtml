@@ -1,0 +1,60 @@
+@{
+    ViewData["Title"] = "Pathology Sticker Print";
+}
+<div class="page-head">
+    <div><h1>Pathology Sticker Print</h1><div class="sub">Barcode labels for collected sample tubes</div></div>
+    <div class="ms-auto d-flex gap-2 align-items-center">
+        <select class="form-select form-select-sm" id="size" style="width:150px">
+            <option value="50x25">50 × 25 mm</option><option value="38x25">38 × 25 mm</option><option value="50x30">50 × 30 mm</option>
+        </select>
+        <input type="date" class="form-control form-control-sm" id="date" style="width:150px">
+        <input class="form-control form-control-sm" id="search" placeholder="Invoice / sample no" style="width:180px">
+        <button class="btn btn-primary btn-sm" id="btnLoad"><i class="bi bi-search"></i></button>
+    </div>
+</div>
+<div class="card">
+    <div class="card-header d-flex">Samples <button class="btn btn-sm btn-primary ms-auto" id="btnPrintSel"><i class="bi bi-printer me-1"></i>Print selected</button></div>
+    <div class="table-responsive"><table class="table table-sm table-hover">
+        <thead><tr><th style="width:34px"><input class="form-check-input" type="checkbox" id="all"></th><th>Sample No</th><th>Invoice</th><th>Patient</th><th>Tube</th><th>Tests</th><th>Collected</th><th></th></tr></thead>
+        <tbody id="rows"></tbody></table></div>
+</div>
+
+@section Scripts {
+<script>
+App.ready(() => {
+    const $ = id => document.getElementById(id);
+    $('date').value = App.isoDate();
+    $('size').value = App.store.get('diag.stickerSize') || '50x25';
+    $('size').onchange = () => App.store.set('diag.stickerSize', $('size').value);
+    const sizeQs = () => { const [w, h] = $('size').value.split('x'); return `&width=${w}&height=${h}`; };
+
+    async function load() {
+        const list = await App.run(() => App.api('/api/diag/samples' + App.qs({ date: $('date').value, search: $('search').value.trim() })));
+        if (!list) return;
+        const ok = list.filter(s => s.status !== 'Rejected');
+        $('rows').innerHTML = ok.length ? ok.map(s => `<tr>
+            <td><input class="form-check-input" type="checkbox" value="${s.id}"></td>
+            <td class="fw-semibold">${App.esc(s.sampleNo)}</td><td>${App.esc(s.invoiceNo)}</td><td>${App.esc(s.patientName)}</td>
+            <td><span class="chip"><span class="dot" style="background:${App.esc(s.colorHex)}"></span>${App.esc(s.vacutainer || '')}</span></td>
+            <td class="small">${App.esc(s.tests)}</td><td class="small">${App.dateTime(s.collectedAt)}</td>
+            <td class="text-end"><button class="btn btn-sm btn-outline-secondary py-0" data-one="${s.id}"><i class="bi bi-printer"></i></button>
+                <button class="btn btn-sm btn-outline-secondary py-0" data-inv="${s.investigationId}" title="All stickers of this invoice"><i class="bi bi-files"></i></button></td></tr>`).join('')
+            : '<tr><td colspan="8" class="empty">No collected sample.</td></tr>';
+    }
+    $('all').onchange = e => document.querySelectorAll('#rows input[type=checkbox]').forEach(c => c.checked = e.target.checked);
+    $('rows').addEventListener('click', e => {
+        const b = e.target.closest('button'); if (!b) return;
+        if (b.dataset.one) App.report(`/api/reports/sticker?sampleId=${b.dataset.one}${sizeQs()}`);
+        if (b.dataset.inv) App.report(`/api/reports/sticker?investigationId=${b.dataset.inv}${sizeQs()}`);
+    });
+    $('btnPrintSel').onclick = () => {
+        const ids = [...document.querySelectorAll('#rows input:checked')].map(c => c.value);
+        if (!ids.length) { App.toast('Select samples to print.', 'warning'); return; }
+        App.report(`/api/reports/sticker?sampleIds=${ids.join(',')}${sizeQs()}`);
+    };
+    $('btnLoad').onclick = load;
+    $('search').addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
+    load();
+});
+</script>
+}

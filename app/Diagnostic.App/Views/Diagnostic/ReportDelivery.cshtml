@@ -1,0 +1,116 @@
+@{
+    ViewData["Title"] = "Report Delivery";
+}
+<div class="page-head">
+    <div><h1>Report Delivery</h1><div class="sub">Hand over reports finalized by the pathologist</div></div>
+    <div class="ms-auto d-flex gap-2 align-items-center">
+        <select class="form-select form-select-sm" id="lhMode" style="width:190px"><option value="true">With letter head</option><option value="false">Pre-printed pad</option></select>
+        <input class="form-control form-control-sm" id="invoiceNo" placeholder="Scan / type invoice no" style="width:200px" autofocus>
+        <button class="btn btn-primary btn-sm" id="btnFind"><i class="bi bi-search me-1"></i>Find</button>
+    </div>
+</div>
+
+<div id="result"></div>
+
+<ul class="nav nav-tabs mt-3 mb-2">
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabReady">Ready to deliver <span class="badge text-bg-success" id="cReady"></span></button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabDone">Delivered</button></li>
+</ul>
+<div class="tab-content">
+    <div class="tab-pane fade show active" id="tabReady">
+        <div class="card"><div class="table-responsive"><table class="table table-sm table-hover">
+            <thead><tr><th>Invoice</th><th>Patient</th><th>Finalized tests</th><th>Delivery due</th><th class="text-end">Due amount</th><th></th></tr></thead>
+            <tbody id="ready"></tbody></table></div></div>
+    </div>
+    <div class="tab-pane fade" id="tabDone">
+        <div class="d-flex gap-2 mb-2 align-items-center"><input type="date" class="form-control form-control-sm" id="doneDate" style="width:150px"></div>
+        <div class="card"><div class="table-responsive"><table class="table table-sm">
+            <thead><tr><th>Invoice</th><th>Patient</th><th>Test</th><th>Finalized by</th><th>Status</th><th></th></tr></thead>
+            <tbody id="done"></tbody></table></div></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+App.ready(async () => {
+    const $ = id => document.getElementById(id);
+    const rights = await App.rights();
+    $('doneDate').value = App.isoDate();
+    $('lhMode').value = String(App.store.get('diag.letterHeadMode') ?? true);
+    $('lhMode').onchange = () => App.store.set('diag.letterHeadMode', $('lhMode').value === 'true');
+    const pdf = (invId, ids) => App.report(`/api/reports/lab-report/${invId}` + App.qs({ detailIds: ids.join(','), letterHead: $('lhMode').value }));
+
+    async function find(no) {
+        no = (no ?? $('invoiceNo').value).trim();
+        if (!no) return;
+        const inv = await App.run(() => App.api('/api/diag/report-delivery/invoice/' + encodeURIComponent(no)));
+        if (!inv) return;
+        const ready = inv.details.filter(d => d.status === 'Finalized');
+        const waiting = inv.details.filter(d => !['Finalized', 'Delivered', 'Cancelled'].includes(d.status));
+        $('result').innerHTML = `<div class="card">
+            <div class="card-header d-flex flex-wrap gap-2 align-items-center"><b>${App.esc(inv.invoiceNo)}</b> ${App.esc(inv.patientName)}
+                <span class="small text-muted">${App.esc(inv.patientCode)} · ${App.esc(inv.patientAge || '')} ${App.esc(inv.gender)} · ${App.esc(inv.phone || '')}</span>
+                ${inv.dueAmount > 0 ? `<span class="chip text-danger ms-auto">Due ${App.money(inv.dueAmount)}</span>` : '<span class="chip text-success ms-auto">Fully paid</span>'}</div>
+            <table class="table table-sm mb-0"><thead><tr><th style="width:34px"></th><th>Test</th><th>Group</th><th>Delivery due</th><th>Status</th></tr></thead>
+            <tbody>${inv.details.map(d => `<tr class="${d.status === 'Cancelled' ? 'text-muted' : ''}">
+                <td>${d.status === 'Finalized' ? `<input class="form-check-input" type="checkbox" value="${d.id}" checked>` : ''}</td>
+                <td>${App.esc(d.testName)}</td><td>${App.esc(d.groupName)}</td><td>${App.dateTime(d.deliveryDateTime)}</td><td>${App.status(d.status)}</td></tr>`).join('')}</tbody></table>
+            <div class="card-footer d-flex gap-2 flex-wrap align-items-center">
+                ${waiting.length ? `<span class="small text-warning-emphasis"><i class="bi bi-hourglass-split me-1"></i>${waiting.length} test(s) not finalized yet</span>` : ''}
+                <span class="ms-auto d-flex gap-2">
+                    <button class="btn btn-outline-primary" id="btnPrint" ${ready.length ? '' : 'disabled'}><i class="bi bi-printer me-1"></i>Print</button>
+                    ${rights.canAdd ? `<button class="btn btn-success" id="btnDeliver" ${ready.length ? '' : 'disabled'}><i class="bi bi-box-arrow-up-right me-1"></i>Print &amp; Deliver</button>` : ''}
+                </span>
+            </div></div>`;
+        const selected = () => [...$('result').querySelectorAll('input:checked')].map(i => Number(i.value));
+        $('btnPrint').onclick = () => { const ids = selected(); if (!ids.length) { App.toast('Select finalized reports.', 'warning'); return; } pdf(inv.id, ids); };
+        $('btnDeliver')?.addEventListener('click', async () => {
+            const ids = selected();
+            if (!ids.length) { App.toast('Select finalized reports.', 'warning'); return; }
+            if (inv.dueAmount > 0 && !await App.confirmBox(`This invoice has ${App.money(inv.dueAmount)} due. Deliver anyway?`, 'Deliver')) return;
+            const to = await App.promptBox('Deliver report', 'Delivered to (name / relation)', { value: inv.patientName, required: false });
+            if (to === null) return;
+            await App.run(async () => {
+                const r = await App.api('/api/diag/report-delivery/deliver', { method: 'POST', body: { investigationId: inv.id, deliveredTo: to, detailIds: ids } });
+                App.toast(`${r.delivered} report(s) delivered.`);
+                pdf(inv.id, ids);
+                find(inv.invoiceNo); loadReady(); loadDone();
+            });
+        });
+    }
+
+    async function loadReady() {
+        const list = await App.api('/api/diag/report-delivery/worklist').catch(e => { App.toast(e.message, 'danger'); return []; });
+        const byInv = {};
+        list.forEach(w => (byInv[w.invoiceNo] ??= { ...w, tests: [], due: w.deliveryDateTime }).tests.push(w.testName));
+        const rows = Object.values(byInv);
+        $('cReady').textContent = rows.length || '';
+        $('ready').innerHTML = rows.length ? rows.map(r => `<tr><td class="fw-semibold">${App.esc(r.invoiceNo)}</td>
+            <td>${App.esc(r.patientName)} <span class="small text-muted">${App.esc(r.patientAge || '')} ${App.esc(r.gender)}</span></td>
+            <td class="small">${App.esc(r.tests.join(', '))}</td><td class="small">${App.dateTime(r.due)}</td>
+            <td class="money ${r.dueAmount > 0 ? 'text-danger fw-bold' : ''}">${App.money(r.dueAmount)}</td>
+            <td class="text-end"><button class="btn btn-sm btn-outline-primary py-0" data-no="${App.esc(r.invoiceNo)}">Open</button></td></tr>`).join('')
+            : '<tr><td colspan="6" class="empty">No finalized report waiting.</td></tr>';
+    }
+
+    async function loadDone() {
+        const d = $('doneDate').value;
+        const list = await App.api('/api/diag/report-delivery/worklist' + App.qs({ status: 'Delivered', from: d, to: d })).catch(() => []);
+        $('done').innerHTML = list.length ? list.map(w => `<tr><td>${App.esc(w.invoiceNo)}</td><td>${App.esc(w.patientName)}</td><td>${App.esc(w.testName)}</td>
+            <td class="small">${App.esc(w.finalizedBy || '')}</td><td>${App.status(w.status)}</td>
+            <td class="text-end"><button class="btn btn-sm btn-outline-secondary py-0" data-reprint="${w.investigationId}" data-detail="${w.detailId}" title="Reprint"><i class="bi bi-printer"></i></button></td></tr>`).join('')
+            : '<tr><td colspan="6" class="empty">Nothing delivered for invoices of this date.</td></tr>';
+    }
+
+    document.addEventListener('click', e => {
+        const b = e.target.closest('button'); if (!b) return;
+        if (b.dataset.no) { $('invoiceNo').value = b.dataset.no; find(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+        if (b.dataset.reprint) pdf(b.dataset.reprint, [b.dataset.detail]);
+    });
+    $('btnFind').onclick = () => find();
+    $('invoiceNo').addEventListener('keydown', e => { if (e.key === 'Enter') find(); });
+    $('doneDate').onchange = loadDone;
+    loadReady(); loadDone();
+});
+</script>
+}

@@ -1,0 +1,63 @@
+@{
+    ViewData["Title"] = "Menu Permission";
+}
+<div class="page-head">
+    <div><h1>Menu Permission</h1><div class="sub">Role-wise rights on every screen. Users get the combined rights of all their roles.</div></div>
+    <div class="ms-auto d-flex gap-2">
+        <select class="form-select form-select-sm" id="role" style="min-width:200px"></select>
+        <select class="form-select form-select-sm" id="project" style="min-width:180px"></select>
+        <button class="btn btn-primary btn-sm" id="btnSave"><i class="bi bi-save me-1"></i>Save</button>
+    </div>
+</div>
+<div class="card">
+    <div class="table-responsive"><table class="table table-sm table-hover">
+        <thead><tr><th>Module</th><th>Menu</th><th>Code</th>
+            @foreach (var a in new[] { "View", "Add", "Edit", "Delete", "Print" })
+            {
+                <th class="text-center"><label class="d-flex flex-column align-items-center gap-1 mb-0">@a<input class="form-check-input" type="checkbox" data-col="can@(a)"></label></th>
+            }
+            <th class="text-center">All</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="9" class="empty">Select a role.</td></tr></tbody></table></div>
+</div>
+
+@section Scripts {
+<script>
+App.ready(async () => {
+    const $ = id => document.getElementById(id);
+    const KEYS = ['canView', 'canAdd', 'canEdit', 'canDelete', 'canPrint'];
+    let rows = [];
+    const [roles, projects] = await Promise.all([App.api('/api/admin/roles/lookup'), App.api('/api/admin/projects/lookup')]);
+    $('role').innerHTML = App.options(roles, '', '-- Select role --');
+    $('project').innerHTML = App.options(projects, '', 'All modules');
+
+    async function load() {
+        if (!$('role').value) return;
+        rows = await App.run(() => App.api(`/api/admin/menu-permissions/${$('role').value}` + App.qs({ projectId: $('project').value }))) || [];
+        $('rows').innerHTML = rows.map((r, i) => `<tr><td class="small text-muted">${App.esc(r.projectName)}</td><td>${App.esc(r.menuName)}</td>
+            <td class="small text-muted">${App.esc(r.menuCode || '')}</td>
+            ${KEYS.map(k => `<td class="text-center"><input class="form-check-input" type="checkbox" data-i="${i}" data-k="${k}" ${r[k] ? 'checked' : ''}></td>`).join('')}
+            <td class="text-center"><input class="form-check-input" type="checkbox" data-row="${i}" ${KEYS.every(k => r[k]) ? 'checked' : ''}></td></tr>`).join('');
+    }
+    $('rows').addEventListener('change', e => {
+        const c = e.target;
+        if (c.dataset.k) rows[c.dataset.i][c.dataset.k] = c.checked;
+        if (c.dataset.row) {
+            KEYS.forEach(k => rows[c.dataset.row][k] = c.checked);
+            c.closest('tr').querySelectorAll('[data-k]').forEach(x => x.checked = c.checked);
+        }
+    });
+    document.querySelectorAll('[data-col]').forEach(h => h.onchange = () => {
+        rows.forEach(r => r[h.dataset.col] = h.checked);
+        document.querySelectorAll(`[data-k="${h.dataset.col}"]`).forEach(x => x.checked = h.checked);
+    });
+    $('role').onchange = load;
+    $('project').onchange = load;
+    $('btnSave').onclick = e => App.run(async () => {
+        if (!$('role').value) throw new Error('Select a role.');
+        await App.api(`/api/admin/menu-permissions/${$('role').value}`, { method: 'PUT', body: rows });
+        App.store.del(App.KEY.menus);
+        App.toast('Permissions saved. Users see the change on their next page load.');
+    }, e.currentTarget);
+});
+</script>
+}

@@ -1,0 +1,138 @@
+@{
+    ViewData["Title"] = "Sample Acknowledgement";
+}
+<div class="page-head">
+    <div><h1>Sample Acknowledgement</h1><div class="sub">Only tubes dispatched from Sample Collection appear here. A rejected tube goes to Sample Collection → Repeat Sample.</div></div>
+    <div class="ms-auto d-flex gap-2 align-items-center">
+        <select class="form-select form-select-sm" id="status" style="width:190px">
+            <option value="Dispatched">Waiting (dispatched)</option>
+            <option value="Received">Acknowledged</option>
+            <option value="Rejected">Rejected</option>
+        </select>
+        <input type="date" class="form-control form-control-sm" id="date" style="width:150px" title="Collection date (for acknowledged / rejected)">
+        <input class="form-control form-control-sm" id="search" placeholder="Invoice / sample no" style="width:170px">
+        <button class="btn btn-primary btn-sm" id="btnLoad"><i class="bi bi-search"></i></button>
+    </div>
+</div>
+
+<div class="card mb-3" id="scanCard">
+    <div class="card-body d-flex align-items-center gap-3 flex-wrap">
+        <i class="bi bi-upc-scan fs-3 text-primary"></i>
+        <input class="form-control" id="scan" placeholder="Scan barcode / type sample no and press Enter to acknowledge" style="max-width:420px" autofocus>
+        <span class="small text-muted" id="lastScan"></span>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex align-items-center gap-2 flex-wrap">
+        <span id="listTitle">Samples</span>
+        <span class="small text-muted" id="selInfo"></span>
+        <span class="ms-auto d-flex gap-2" id="bulkBtns">
+            <button class="btn btn-success btn-sm" id="btnAck"><i class="bi bi-check2-all me-1"></i>Acknowledge selected</button>
+            <button class="btn btn-outline-danger btn-sm" id="btnReject"><i class="bi bi-x-octagon me-1"></i>Reject selected</button>
+        </span>
+    </div>
+    <div class="table-responsive"><table class="table table-sm table-hover">
+        <thead><tr><th style="width:34px"><input class="form-check-input" type="checkbox" id="all"></th><th>Sample No</th><th>Invoice</th><th>Patient</th><th>Tube</th>
+            <th>Tests</th><th>Collected</th><th>Dispatched</th><th>Acknowledged</th><th>Status</th><th></th></tr></thead>
+        <tbody id="rows"></tbody></table></div>
+</div>
+
+@section Scripts {
+<script>
+App.ready(async () => {
+    const $ = id => document.getElementById(id);
+    const rights = await App.rights();
+    $('date').value = App.isoDate();
+    if (!rights.canEdit) { $('bulkBtns').classList.add('d-none'); $('scanCard').classList.add('d-none'); }
+    const REASONS = ['Haemolysed', 'Clotted', 'Insufficient quantity', 'Wrong tube', 'Label mismatch', 'Leaked / broken'];
+
+    const actionable = () => $('status').value === 'Dispatched'; // only dispatched tubes can be acknowledged
+    const boxes = () => [...document.querySelectorAll('#rows input[data-sel]')];
+    const selected = () => boxes().filter(b => b.checked).map(b => Number(b.value));
+    const updateSel = () => {
+        const n = selected().length;
+        $('selInfo').textContent = n ? `${n} selected` : '';
+        $('all').checked = n > 0 && n === boxes().length;
+    };
+
+    async function load() {
+        const st = $('status').value;
+        // Waiting lists show everything pending; history lists are per collection date.
+        const q = { status: st, search: $('search').value.trim(), date: actionable() ? '' : $('date').value };
+        const list = await App.run(() => App.api('/api/diag/sample-ack' + App.qs(q)));
+        if (!list) return;
+        $('bulkBtns').classList.toggle('invisible', !actionable());
+        $('listTitle').textContent = $('status').selectedOptions[0].text + ` (${list.length})`;
+        $('rows').innerHTML = list.length ? list.map(s => `<tr>
+            <td>${actionable() ? `<input class="form-check-input" type="checkbox" data-sel value="${s.id}">` : ''}</td>
+            <td class="fw-semibold">${App.esc(s.sampleNo)} ${s.repeatOfSampleNo ? '<span class="chip text-danger">Repeat</span>' : ''}</td>
+            <td>${App.esc(s.invoiceNo)}</td>
+            <td>${App.esc(s.patientName)} <span class="small text-muted">${App.esc(s.patientAge || '')} ${App.esc(s.gender)}</span></td>
+            <td><span class="chip"><span class="dot" style="background:${App.esc(s.colorHex)}"></span>${App.esc(s.vacutainer || '')}</span></td>
+            <td class="small">${App.esc(s.tests)}</td>
+            <td class="small">${App.dateTime(s.collectedAt)}</td><td class="small">${App.dateTime(s.dispatchedAt)}</td><td class="small">${App.dateTime(s.receivedAt)}</td>
+            <td>${App.status(s.status)} ${s.rejectReason ? `<div class="small text-danger">${App.esc(s.rejectReason)}</div>` : ''}</td>
+            <td class="text-end text-nowrap">${actionable() && rights.canEdit ? `
+                <button class="btn btn-sm btn-success py-0" data-ack="${s.id}" title="Acknowledge"><i class="bi bi-check-lg"></i></button>
+                <button class="btn btn-sm btn-outline-danger py-0" data-rej="${s.id}" title="Reject"><i class="bi bi-x-lg"></i></button>` : ''}</td></tr>`).join('')
+            : '<tr><td colspan="11" class="empty">No sample.</td></tr>';
+        updateSel();
+    }
+
+    async function acknowledge(ids, btn) {
+        await App.run(async () => {
+            const res = await App.api('/api/diag/sample-ack/acknowledge', { method: 'POST', body: { sampleIds: ids } });
+            App.toast(`${res.length} sample(s) acknowledged.`);
+            load();
+        }, btn);
+    }
+
+    function reject(ids) {
+        const m = App.modal(`Reject ${ids.length} sample(s)`, `
+            <label class="form-label required">Reason</label>
+            <select class="form-select mb-2" data-r><option value="">-- Select --</option>${REASONS.map(r => `<option>${r}</option>`).join('')}<option value="__other">Other…</option></select>
+            <input class="form-control d-none" data-other placeholder="Write the reason">
+            <div class="form-text">The tests move to Sample Collection → Repeat Sample for a new collection.</div>`,
+            { footer: '<button class="btn btn-light" data-bs-dismiss="modal">Cancel</button><button class="btn btn-danger" data-ok>Reject</button>' });
+        m.q('[data-r]').onchange = e => m.q('[data-other]').classList.toggle('d-none', e.target.value !== '__other');
+        m.q('[data-ok]').onclick = e => App.run(async () => {
+            const sel = m.q('[data-r]').value;
+            const reason = sel === '__other' ? m.q('[data-other]').value.trim() : sel;
+            if (!reason) throw new Error('Select a reject reason.');
+            await App.api('/api/diag/sample-ack/reject', { method: 'POST', body: { sampleIds: ids, reason } });
+            m.close();
+            App.toast('Rejected – sent to Repeat Sample.', 'warning');
+            load();
+        }, e.currentTarget);
+    }
+
+    $('rows').addEventListener('change', updateSel);
+    $('all').onchange = e => { boxes().forEach(b => b.checked = e.target.checked); updateSel(); };
+    $('rows').addEventListener('click', e => {
+        const b = e.target.closest('button'); if (!b) return;
+        if (b.dataset.ack) acknowledge([Number(b.dataset.ack)], b);
+        if (b.dataset.rej) reject([Number(b.dataset.rej)]);
+    });
+    $('btnAck').onclick = e => { const ids = selected(); if (!ids.length) { App.toast('Select samples.', 'warning'); return; } acknowledge(ids, e.currentTarget); };
+    $('btnReject').onclick = () => { const ids = selected(); if (!ids.length) { App.toast('Select samples.', 'warning'); return; } reject(ids); };
+
+    $('scan').addEventListener('keydown', async e => {
+        const no = e.target.value.trim();
+        if (e.key !== 'Enter' || !no) return;
+        e.target.value = '';
+        await App.run(async () => {
+            const s = await App.api('/api/diag/sample-ack/scan/' + encodeURIComponent(no), { method: 'POST' });
+            $('lastScan').innerHTML = `<i class="bi bi-check-circle-fill text-success"></i> ${App.esc(s.sampleNo)} – ${App.esc(s.patientName)} (${App.esc(s.tests)})`;
+            load();
+        });
+        e.target.focus();
+    });
+
+    ['status', 'date'].forEach(id => $(id).onchange = load);
+    $('btnLoad').onclick = load;
+    $('search').addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
+    load();
+});
+</script>
+}

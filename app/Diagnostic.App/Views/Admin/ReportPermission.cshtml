@@ -1,0 +1,38 @@
+@{
+    ViewData["Title"] = "Report Permission";
+}
+<div class="page-head">
+    <div><h1>Report Permission Management</h1><div class="sub">Which role can view / export each report</div></div>
+    <div class="ms-auto d-flex gap-2">
+        <select class="form-select form-select-sm" id="role" style="min-width:200px"></select>
+        <button class="btn btn-primary btn-sm" id="btnSave"><i class="bi bi-save me-1"></i>Save</button>
+    </div>
+</div>
+<div class="card">
+    <div class="table-responsive"><table class="table table-sm table-hover">
+        <thead><tr><th>Report</th><th>Code</th><th>Module</th><th class="text-center">View</th><th class="text-center">Export</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="5" class="empty">Select a role.</td></tr></tbody></table></div>
+</div>
+
+@section Scripts {
+<script>
+App.ready(async () => {
+    const $ = id => document.getElementById(id);
+    let rows = [];
+    $('role').innerHTML = App.options(await App.api('/api/admin/roles/lookup'), '', '-- Select role --');
+    $('role').onchange = async () => {
+        if (!$('role').value) return;
+        rows = await App.run(() => App.api('/api/admin/report-permissions/' + $('role').value)) || [];
+        $('rows').innerHTML = rows.map((r, i) => `<tr><td>${App.esc(r.reportName)}</td><td class="small text-muted">${App.esc(r.reportCode || '')}</td>
+            <td class="small">${App.esc(r.projectName || '')}</td>
+            ${['canView', 'canExport'].map(k => `<td class="text-center"><input class="form-check-input" type="checkbox" data-i="${i}" data-k="${k}" ${r[k] ? 'checked' : ''}></td>`).join('')}</tr>`).join('');
+    };
+    $('rows').addEventListener('change', e => { const c = e.target; if (c.dataset.k) rows[c.dataset.i][c.dataset.k] = c.checked; });
+    $('btnSave').onclick = e => App.run(async () => {
+        if (!$('role').value) throw new Error('Select a role.');
+        await App.api('/api/admin/report-permissions/' + $('role').value, { method: 'PUT', body: rows });
+        App.toast('Report permissions saved.');
+    }, e.currentTarget);
+});
+</script>
+}

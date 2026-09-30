@@ -1,0 +1,152 @@
+@{
+    ViewData["Title"] = "Lab Report Finalization";
+}
+<div class="page-head">
+    <div><h1>Lab Report Finalization</h1><div class="sub">Pathologist sign-off of verified results. Only finalized reports can be delivered.</div></div>
+    <div class="ms-auto d-flex gap-2 flex-wrap align-items-center">
+        <select class="form-select form-select-sm" id="view" style="width:190px">
+            <option value="Verified">Waiting for finalization</option>
+            <option value="Finalized">Finalized (not delivered)</option>
+        </select>
+        <select class="form-select form-select-sm" id="group" style="width:170px"></select>
+        <input class="form-control form-control-sm" id="search" placeholder="Invoice / sample / patient" style="width:190px">
+        <button class="btn btn-primary btn-sm" id="btnLoad"><i class="bi bi-search"></i></button>
+    </div>
+</div>
+
+<div class="alert alert-warning d-none" id="notAllowed"><i class="bi bi-shield-lock me-2"></i><span></span></div>
+
+<div class="row g-3">
+    <div class="col-xl-5">
+        <div class="card">
+            <div class="card-header d-flex align-items-center gap-2 flex-wrap">
+                <label class="form-check mb-0"><input class="form-check-input" type="checkbox" id="all"> <span class="form-check-label small">All</span></label>
+                <span class="small text-muted" id="selInfo"></span>
+                <span class="ms-auto d-flex gap-2 align-items-center" id="bulk">
+                    <select class="form-select form-select-sm" id="bulkSigner" style="width:170px" title="Signing doctor (optional – keeps the one chosen in result entry)"></select>
+                    <button class="btn btn-success btn-sm" id="btnFinalizeSel"><i class="bi bi-patch-check me-1"></i>Finalize selected</button>
+                </span>
+            </div>
+            <div class="table-responsive" style="max-height:calc(100vh - 230px)"><table class="table table-sm table-hover">
+                <thead class="sticky-top"><tr><th style="width:30px"></th><th>Invoice</th><th>Patient</th><th>Test</th><th>Status</th></tr></thead>
+                <tbody id="work"></tbody></table></div>
+        </div>
+    </div>
+    <div class="col-xl-7"><div id="panel"><div class="card"><div class="empty">Select a report to review.</div></div></div></div>
+</div>
+
+@section Scripts {
+<script>
+App.ready(async () => {
+    const $ = id => document.getElementById(id);
+    const [lookups, can] = await Promise.all([App.api('/api/diag/lookups/billing'), App.api('/api/diag/report-finalization/can-finalize')]);
+    $('group').innerHTML = App.options(lookups.testGroups, '', 'All groups');
+    $('bulkSigner').innerHTML = App.options(lookups.signDoctors, '', 'Keep signer');
+    if (!can.allowed) {
+        $('notAllowed').classList.remove('d-none');
+        $('notAllowed').querySelector('span').textContent = can.message + ' You can review, but not finalize.';
+        $('bulk').classList.add('d-none');
+    }
+    let currentId = null, list = [];
+    const pending = () => $('view').value === 'Verified';
+
+    const boxes = () => [...document.querySelectorAll('#work input[data-sel]')];
+    const selected = () => boxes().filter(b => b.checked).map(b => Number(b.value));
+    const updateSel = () => { const n = selected().length; $('selInfo').textContent = n ? `${n} selected` : ''; $('all').checked = n > 0 && n === boxes().length; };
+
+    async function load() {
+        list = await App.run(() => App.api('/api/diag/report-finalization/worklist' + App.qs({
+            status: $('view').value, testGroupId: $('group').value, search: $('search').value.trim() }))) || [];
+        $('all').parentElement.classList.toggle('invisible', !pending() || !can.allowed);
+        $('bulk').classList.toggle('invisible', !pending());
+        $('work').innerHTML = list.length ? list.map(w => `<tr data-id="${w.detailId}" style="cursor:pointer" class="${w.detailId === currentId ? 'table-active' : ''}">
+            <td>${pending() && can.allowed ? `<input class="form-check-input" type="checkbox" data-sel value="${w.detailId}">` : ''}</td>
+            <td><div class="fw-semibold">${App.esc(w.invoiceNo)}</div><div class="small text-muted">${App.dateTime(w.verifiedAt)}</div></td>
+            <td>${App.esc(w.patientName)}<div class="small text-muted">${App.esc(w.patientAge || '')} ${App.esc(w.gender)}</div></td>
+            <td>${App.esc(w.testName)}<div class="small text-muted">${App.esc(w.groupName)}</div></td>
+            <td>${App.status(w.status)}${w.finalizedBy ? `<div class="small text-muted">${App.esc(w.finalizedBy)}</div>` : ''}</td></tr>`).join('')
+            : `<tr><td colspan="5" class="empty">${pending() ? 'No report waiting for finalization.' : 'No finalized report waiting for delivery.'}</td></tr>`;
+        updateSel();
+    }
+
+    async function open(id) {
+        currentId = id;
+        document.querySelectorAll('#work tr').forEach(tr => tr.classList.toggle('table-active', Number(tr.dataset.id) === id));
+        const d = await App.run(() => App.api('/api/diag/report-finalization/' + id));
+        if (!d) return;
+        let lastHeading = null;
+        const rows = d.parameters.map(p => {
+            const head = p.groupHeading && p.groupHeading !== lastHeading ? `<tr><td colspan="4" class="fw-bold small pt-2 text-decoration-underline">${App.esc(p.groupHeading)}</td></tr>` : '';
+            lastHeading = p.groupHeading;
+            const flag = p.flag === 'High' ? ' ▲ H' : p.flag === 'Low' ? ' ▼ L' : '';
+            return `${head}<tr><td class="${p.groupHeading ? 'ps-3' : ''}">${App.esc(p.name)}</td>
+                <td class="flag-${p.flag} fw-semibold">${App.esc(p.value ?? '')}${flag}</td>
+                <td class="small text-muted">${App.esc(p.unit || '')}</td><td class="small">${App.esc(p.normalRange || '')}</td></tr>`;
+        }).join('');
+        const isPending = d.status === 'Verified';
+        $('panel').innerHTML = `<div class="card">
+            <div class="card-header d-flex flex-wrap gap-2 align-items-center"><span class="fw-bold">${App.esc(d.testName)}</span> ${App.status(d.status)}
+                <span class="ms-auto small text-muted">${App.esc(d.invoiceNo)} · ${App.esc(d.sampleNo || '')}</span></div>
+            <div class="card-body">
+                <div class="small mb-2"><b>${App.esc(d.patientName)}</b> (${App.esc(d.patientCode)}) · ${App.esc(d.patientAge || '')} ${App.esc(d.gender)} · Ref: ${App.esc(d.referDoctor || 'Self')}</div>
+                <div class="small text-muted mb-2">Verified by ${App.esc(d.verifiedBy || '-')} ${d.verifiedAt ? 'on ' + App.dateTime(d.verifiedAt) : ''}</div>
+                ${d.resultType === 'Parameter'
+                    ? `<table class="table table-sm"><thead><tr><th>Parameter</th><th>Result</th><th>Unit</th><th>Reference</th></tr></thead><tbody>${rows}</tbody></table>`
+                    : `<pre class="border rounded p-2 bg-light" style="white-space:pre-wrap;font-family:inherit">${App.esc(d.reportText || '')}</pre>`}
+                ${d.comments ? `<div class="small"><b>Comment:</b> ${App.esc(d.comments)}</div>` : ''}
+                ${isPending && can.allowed ? `<div class="row g-2 mt-2"><div class="col-md-6"><label class="form-label">Signed by</label>
+                    <select class="form-select form-select-sm" id="signer">${App.options(lookups.signDoctors, d.signDoctorId, '-- Doctor --')}</select></div></div>` : ''}
+            </div>
+            <div class="card-footer d-flex gap-2 flex-wrap">
+                ${isPending && can.allowed ? `<button class="btn btn-success" data-act="finalize"><i class="bi bi-patch-check me-1"></i>Finalize</button>
+                    <button class="btn btn-outline-danger" data-act="return"><i class="bi bi-arrow-return-left me-1"></i>Return to lab</button>` : ''}
+                ${d.status === 'Finalized' && can.allowed ? `<button class="btn btn-outline-danger" data-act="unfinalize"><i class="bi bi-arrow-counterclockwise me-1"></i>Un-finalize</button>` : ''}
+                <button class="btn btn-outline-secondary ms-auto" data-act="pdf"><i class="bi bi-file-pdf me-1"></i>${isPending ? 'Preview' : 'Report'} PDF</button>
+            </div></div>`;
+
+        $('panel').querySelector('.card-footer').onclick = async e => {
+            const b = e.target.closest('[data-act]'); if (!b) return;
+            const act = b.dataset.act;
+            if (act === 'pdf') { App.report(`/api/reports/lab-report/${d.investigationId}` + App.qs({ detailIds: d.detailId, preview: isPending })); return; }
+            if (act === 'return') {
+                const reason = await App.promptBox('Return to lab', 'What must be corrected?', { textarea: true });
+                if (!reason) return;
+                await App.run(async () => { await App.api(`/api/diag/report-finalization/${id}/return`, { method: 'POST', body: { reason } }); App.toast('Sent back to the lab.', 'warning'); after(); });
+                return;
+            }
+            if (act === 'unfinalize' && !await App.confirmBox('Un-finalize this report? It will not be deliverable until finalized again.', 'Un-finalize')) return;
+            await App.run(async () => {
+                if (act === 'finalize') {
+                    await App.api('/api/diag/report-finalization/finalize', { method: 'POST', body: { detailIds: [id], signDoctorId: Number($('signer').value) || null } });
+                    App.toast('Report finalized – ready for delivery.');
+                } else {
+                    await App.api(`/api/diag/report-finalization/${id}/unfinalize`, { method: 'POST' });
+                    App.toast('Finalization removed.');
+                }
+                after();
+            }, b);
+        };
+    }
+    function after() { currentId = null; $('panel').innerHTML = '<div class="card"><div class="empty">Select a report to review.</div></div>'; load(); }
+
+    $('work').addEventListener('click', e => {
+        if (e.target.matches('input[data-sel]')) { updateSel(); return; }
+        const tr = e.target.closest('tr[data-id]'); if (tr) open(Number(tr.dataset.id));
+    });
+    $('all').onchange = e => { boxes().forEach(b => b.checked = e.target.checked); updateSel(); };
+    $('btnFinalizeSel').onclick = e => {
+        const ids = selected();
+        if (!ids.length) { App.toast('Select reports to finalize.', 'warning'); return; }
+        App.run(async () => {
+            const r = await App.api('/api/diag/report-finalization/finalize', { method: 'POST', body: { detailIds: ids, signDoctorId: Number($('bulkSigner').value) || null } });
+            App.toast(`${r.finalized} report(s) finalized.`);
+            after();
+        }, e.currentTarget);
+    };
+    ['view', 'group'].forEach(id => $(id).onchange = () => { currentId = null; load(); });
+    $('btnLoad').onclick = load;
+    $('search').addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
+    load();
+});
+</script>
+}

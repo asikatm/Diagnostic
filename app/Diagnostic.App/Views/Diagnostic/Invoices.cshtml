@@ -1,0 +1,113 @@
+@{
+    ViewData["Title"] = "Invoice List";
+}
+<div class="page-head">
+    <div><h1>Invoice List / Due Collection</h1></div>
+    <div class="ms-auto d-flex gap-2 flex-wrap align-items-center">
+        <input type="date" class="form-control form-control-sm" id="from" style="width:140px">
+        <input type="date" class="form-control form-control-sm" id="to" style="width:140px">
+        <input class="form-control form-control-sm" id="search" placeholder="Invoice / patient / phone" style="width:200px">
+        <div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="dueOnly"><label class="form-check-label small" for="dueOnly">Due only</label></div>
+        <button class="btn btn-primary btn-sm" id="btnLoad"><i class="bi bi-search"></i></button>
+    </div>
+</div>
+<div class="card">
+    <div class="table-responsive"><table class="table table-hover table-sm">
+        <thead><tr><th>Invoice</th><th>Date</th><th>Patient</th><th>Phone</th><th>Ref. Doctor</th><th class="text-end">Tests</th>
+            <th class="text-end">Net</th><th class="text-end">Paid</th><th class="text-end">Due</th><th>Status</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+        <tfoot id="foot"></tfoot>
+    </table></div>
+</div>
+
+@section Scripts {
+<script>
+App.ready(async () => {
+    const $ = id => document.getElementById(id);
+    const params = new URLSearchParams(location.search);
+    $('from').value = App.isoDate(); $('to').value = App.isoDate();
+    if (params.get('due')) { $('dueOnly').checked = true; $('from').value = ''; }
+    const [lookups, rights] = await Promise.all([App.api('/api/diag/lookups/billing'), App.rights()]);
+
+    async function load() {
+        const res = await App.run(() => App.api('/api/diag/investigations' + App.qs({
+            from: $('from').value, to: $('to').value, search: $('search').value.trim(), dueOnly: $('dueOnly').checked, pageSize: 500 })));
+        if (!res) return;
+        const t = { net: 0, paid: 0, due: 0 };
+        $('rows').innerHTML = res.items.length ? res.items.map(i => {
+            t.net += i.netAmount; t.paid += i.paidAmount - i.refundAmount; t.due += i.dueAmount;
+            return `<tr>
+                <td class="fw-semibold">${App.esc(i.invoiceNo)}</td><td>${App.dateTime(i.invoiceDate)}</td>
+                <td>${App.esc(i.patientName)} <span class="text-muted small">${App.esc(i.patientCode)}</span></td><td>${App.esc(i.phone)}</td>
+                <td>${App.esc(i.referDoctor || 'Self')}</td><td class="text-end">${i.testCount}</td>
+                <td class="money">${App.money(i.netAmount)}</td><td class="money">${App.money(i.paidAmount - i.refundAmount)}</td>
+                <td class="money ${i.dueAmount > 0 ? 'text-danger fw-bold' : ''}">${App.money(i.dueAmount)}</td><td>${App.status(i.status)}</td>
+                <td class="text-end text-nowrap">
+                    <button class="btn btn-sm btn-outline-primary py-0" data-view="${i.id}" title="Details"><i class="bi bi-eye"></i></button>
+                    ${i.dueAmount > 0 && rights.canAdd ? `<button class="btn btn-sm btn-outline-success py-0" data-due="${i.id}" title="Collect due"><i class="bi bi-cash-coin"></i></button>` : ''}
+                    <button class="btn btn-sm btn-outline-secondary py-0" data-print="${i.id}" title="Invoice / receipt"><i class="bi bi-printer"></i></button>
+                </td></tr>`;
+        }).join('') : '<tr><td colspan="11" class="empty">No invoice found.</td></tr>';
+        $('foot').innerHTML = res.items.length ? `<tr class="fw-bold"><td colspan="6">Total (${res.total})</td><td class="money">${App.money(t.net)}</td>
+            <td class="money">${App.money(t.paid)}</td><td class="money text-danger">${App.money(t.due)}</td><td colspan="2"></td></tr>` : '';
+    }
+
+    async function view(id) {
+        const inv = await App.run(() => App.api('/api/diag/investigations/' + id));
+        if (!inv) return;
+        App.modal(`Invoice ${App.esc(inv.invoiceNo)}`, `
+            <div class="row small mb-2">
+                <div class="col-md-6"><b>${App.esc(inv.patientName)}</b> (${App.esc(inv.patientCode)}) · ${App.esc(inv.patientAge || '')} ${App.esc(inv.gender)}<br>${App.esc(inv.phone || '')}</div>
+                <div class="col-md-6 text-md-end">${App.dateTime(inv.invoiceDate)}<br>Ref: ${App.esc(inv.referDoctor || 'Self')} ${inv.packageName ? '· Package: ' + App.esc(inv.packageName) : ''}</div>
+            </div>
+            <table class="table table-sm"><thead><tr><th>Test</th><th>Sample</th><th>Delivery</th><th>Status</th><th class="text-end">Price</th><th class="text-end">Disc.</th><th class="text-end">Net</th></tr></thead>
+            <tbody>${inv.details.map(d => `<tr><td>${App.esc(d.testName)}</td><td>${App.esc(d.sampleNo || '')}</td><td>${App.dateTime(d.deliveryDateTime)}</td>
+                <td>${App.status(d.status)}</td><td class="money">${App.money(d.unitPrice)}</td><td class="money">${App.money(d.discountAmount)}</td><td class="money">${App.money(d.netAmount)}</td></tr>`).join('')}</tbody>
+            <tfoot><tr><td colspan="6" class="text-end">Net</td><td class="money fw-bold">${App.money(inv.netAmount)}</td></tr>
+                <tr><td colspan="6" class="text-end">Paid / Refund</td><td class="money">${App.money(inv.paidAmount)} / ${App.money(inv.refundAmount)}</td></tr>
+                <tr><td colspan="6" class="text-end">Due</td><td class="money fw-bold text-danger">${App.money(inv.dueAmount)}</td></tr></tfoot></table>
+            <h6 class="fw-bold mt-3">Money receipts</h6>
+            <table class="table table-sm"><thead><tr><th>Receipt</th><th>Date</th><th>Type</th><th>Mode</th><th class="text-end">Amount</th><th></th></tr></thead>
+            <tbody>${inv.payments.map(p => `<tr><td>${App.esc(p.receiptNo)}</td><td>${App.dateTime(p.paymentDate)}</td><td>${App.esc(p.paymentType)}</td>
+                <td>${App.esc(p.paymentMode)} ${App.esc(p.paymentChannel || '')} ${App.esc(p.transactionRef || '')}</td><td class="money">${App.money(p.amount)}</td>
+                <td class="text-end"><button class="btn btn-sm btn-outline-secondary py-0" onclick="App.report('/api/reports/money-receipt/${inv.id}?paymentId=${p.id}')"><i class="bi bi-printer"></i></button></td></tr>`).join('')
+                || '<tr><td colspan="6" class="text-muted">No payment</td></tr>'}</tbody></table>`, { size: 'modal-lg' });
+    }
+
+    function collectDue(id) {
+        App.run(async () => {
+            const inv = await App.api('/api/diag/investigations/' + id);
+            const m = App.modal(`Collect due – ${App.esc(inv.invoiceNo)}`, `
+                <p class="mb-2">${App.esc(inv.patientName)} · Due <b class="text-danger">${App.money(inv.dueAmount)}</b></p>
+                <div class="row g-2">
+                    <div class="col-6"><label class="form-label">Payment mode</label><select class="form-select" data-mode>${App.options(lookups.paymentModes, lookups.paymentModes[0]?.id, null)}</select></div>
+                    <div class="col-6"><label class="form-label">Channel</label><select class="form-select" data-ch></select></div>
+                    <div class="col-6"><label class="form-label">Transaction ref.</label><input class="form-control" data-ref></div>
+                    <div class="col-6"><label class="form-label required">Amount</label><input type="number" class="form-control fw-bold" data-amt value="${inv.dueAmount}"></div>
+                </div>`, { footer: '<button class="btn btn-success" data-ok><i class="bi bi-cash-coin me-1"></i>Collect & print</button>' });
+            const fill = () => { const ch = lookups.paymentChannels.filter(c => String(c.paymentModeId) === m.q('[data-mode]').value); m.q('[data-ch]').innerHTML = App.options(ch, '', ch.length ? '-- Select --' : 'N/A'); };
+            m.q('[data-mode]').onchange = fill; fill();
+            m.q('[data-ok]').onclick = e => App.run(async () => {
+                const r = await App.api(`/api/diag/investigations/${id}/due-collection`, { method: 'POST', body: {
+                    amount: Number(m.q('[data-amt]').value), paymentModeId: Number(m.q('[data-mode]').value),
+                    paymentChannelId: Number(m.q('[data-ch]').value) || null, transactionRef: m.q('[data-ref]').value.trim() || null } });
+                m.close();
+                App.toast(`Collected ${App.money(r.amount)} (${r.receiptNo}).`);
+                App.report(`/api/reports/money-receipt/${id}?paymentId=${r.paymentId}`);
+                load();
+            }, e.currentTarget);
+        });
+    }
+
+    $('rows').addEventListener('click', e => {
+        const b = e.target.closest('button'); if (!b) return;
+        if (b.dataset.view) view(b.dataset.view);
+        if (b.dataset.due) collectDue(b.dataset.due);
+        if (b.dataset.print) App.report('/api/reports/money-receipt/' + b.dataset.print);
+    });
+    $('btnLoad').onclick = load;
+    $('search').addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
+    load();
+});
+</script>
+}

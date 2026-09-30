@@ -1,0 +1,30 @@
+@{
+    ViewData["Title"] = "Home";
+}
+<div class="page-head">
+    <div>
+        <h1 id="welcome">Welcome back</h1>
+        <div class="sub">Select a module to get started</div>
+    </div>
+</div>
+<div class="tiles" id="tiles"><div class="empty">Loading…</div></div>
+
+@section Scripts {
+<script>
+    App.ready(async () => {
+        const u = App.user();
+        if (!u) return;
+        document.getElementById('welcome').textContent = 'Welcome back, ' + u.fullName;
+        try {
+            const projects = await App.menus();
+            document.getElementById('tiles').innerHTML = projects.length
+                ? projects.map(p => `<a class="tile" href="/Home/Module/${App.esc(p.code)}">
+                        <div class="tile-icon"><i class="bi ${App.esc(p.icon || 'bi-grid')}"></i></div>
+                        <div class="tile-name">${App.esc(p.name)}</div></a>`).join('')
+                : '<div class="empty">No module is assigned to your role. Please contact the administrator.</div>';
+        } catch (e) {
+            document.getElementById('tiles').innerHTML = `<div class="empty text-danger">${App.esc(e.message)}</div>`;
+        }
+    });
+</script>
+}

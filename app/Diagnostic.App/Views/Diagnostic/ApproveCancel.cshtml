@@ -1,0 +1,46 @@
+@{
+    ViewData["Title"] = "Approve Cancel";
+}
+<div class="page-head">
+    <div><h1>Approve Cancel</h1><div class="sub">Approving cancels the test(s), recalculates the invoice and books the refund</div></div>
+    <div class="ms-auto"><button class="btn btn-outline-secondary btn-sm" id="btnReload"><i class="bi bi-arrow-repeat"></i></button></div>
+</div>
+<div class="card">
+    <div class="table-responsive"><table class="table table-sm table-hover">
+        <thead><tr><th>Requested</th><th>By</th><th>Invoice</th><th>Patient</th><th>Test</th><th class="text-end">Value</th><th>Reason</th><th class="text-end">Refund</th><th></th></tr></thead>
+        <tbody id="rows"></tbody></table></div>
+</div>
+
+@section Scripts {
+<script>
+App.ready(async () => {
+    const $ = id => document.getElementById(id);
+    const rights = await App.rights();
+    async function load() {
+        const list = await App.run(() => App.api('/api/diag/cancel-requests/pending'));
+        if (!list) return;
+        $('rows').innerHTML = list.length ? list.map(c => `<tr>
+            <td class="small">${App.dateTime(c.requestedAt)}</td><td class="small">${App.esc(c.requestedBy || '')}</td>
+            <td>${App.esc(c.invoiceNo)}</td><td>${App.esc(c.patientName)}</td><td>${App.esc(c.testName || 'Full invoice')}</td>
+            <td class="money">${App.money(c.testAmount)}</td><td>${App.esc(c.reason)}</td><td class="money fw-semibold">${App.money(c.refundAmount)}</td>
+            <td class="text-end text-nowrap">${rights.canEdit ? `
+                <button class="btn btn-sm btn-success py-0" data-ok="${c.id}"><i class="bi bi-check-lg"></i> Approve</button>
+                <button class="btn btn-sm btn-outline-danger py-0" data-no="${c.id}"><i class="bi bi-x-lg"></i> Reject</button>` : ''}</td></tr>`).join('')
+            : '<tr><td colspan="9" class="empty">No pending request.</td></tr>';
+    }
+    $('rows').addEventListener('click', async e => {
+        const b = e.target.closest('button'); if (!b) return;
+        const approve = !!b.dataset.ok;
+        const remarks = await App.promptBox(approve ? 'Approve cancellation' : 'Reject cancellation', 'Remarks', { required: !approve });
+        if (remarks === null) return;
+        await App.run(async () => {
+            await App.api(`/api/diag/cancel-requests/${b.dataset.ok || b.dataset.no}/decision`, { method: 'POST', body: { approve, remarks } });
+            App.toast(approve ? 'Approved – invoice updated.' : 'Request rejected.');
+            load();
+        });
+    });
+    $('btnReload').onclick = load;
+    load();
+});
+</script>
+}
