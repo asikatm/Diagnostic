@@ -1,0 +1,96 @@
+@{
+    ViewData["Title"] = "Media Commission";
+}
+<div class="page-head">
+    <div><h1>Media Commission</h1><div class="sub" id="range">Commission earned by media on billed tests (cancelled tests excluded)</div></div>
+    <div class="ms-auto d-flex gap-2 flex-wrap align-items-center">
+        <input type="date" class="form-control form-control-sm" id="from" style="width:145px">
+        <span class="text-muted small">to</span>
+        <input type="date" class="form-control form-control-sm" id="to" style="width:145px">
+        <select class="form-select form-select-sm" id="media" style="width:220px"></select>
+        <div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="zero" checked><label class="form-check-label small" for="zero">Show media without business</label></div>
+        <button class="btn btn-primary btn-sm" id="btnLoad"><i class="bi bi-search me-1"></i>Show</button>
+    </div>
+</div>
+
+<div class="kpis mb-3" id="kpis"></div>
+
+<div class="card mb-3">
+    <div class="card-header d-flex align-items-center gap-2">
+        <span>Media wise summary</span>
+        <span class="ms-auto d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" data-pdf="MEDIA_COMMISSION_SUMMARY"><i class="bi bi-file-pdf me-1"></i>PDF</button>
+            <button class="btn btn-sm btn-outline-success" data-csv="MEDIA_COMMISSION_SUMMARY"><i class="bi bi-filetype-csv me-1"></i>CSV</button>
+        </span>
+    </div>
+    <div class="table-responsive"><table class="table table-sm table-hover">
+        <thead><tr><th>#</th><th>Code</th><th>Media</th><th>Phone</th><th class="text-end">Invoices</th><th class="text-end">Tests</th>
+            <th class="text-end">Bill (after discount)</th><th class="text-end">Commission</th><th></th></tr></thead>
+        <tbody id="summary"></tbody><tfoot id="summaryFoot"></tfoot></table></div>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex align-items-center gap-2">
+        <span id="detailTitle">Details</span>
+        <span class="ms-auto d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" data-pdf="MEDIA_COMMISSION_DETAIL"><i class="bi bi-file-pdf me-1"></i>PDF</button>
+            <button class="btn btn-sm btn-outline-success" data-csv="MEDIA_COMMISSION_DETAIL"><i class="bi bi-filetype-csv me-1"></i>CSV</button>
+        </span>
+    </div>
+    <div class="table-responsive" style="max-height:60vh"><table class="table table-sm">
+        <thead class="sticky-top"><tr><th>Media</th><th>Date</th><th>Invoice</th><th>Patient</th><th>Test</th><th>Group</th>
+            <th class="text-end">Bill</th><th class="text-end">Commission</th><th class="text-end">Invoice due</th></tr></thead>
+        <tbody id="details"></tbody></table></div>
+</div>
+
+@section Scripts {
+<script>
+App.ready(async () => {
+    const $ = id => document.getElementById(id);
+    const first = new Date(); first.setDate(1);
+    $('from').value = App.isoDate(first); $('to').value = App.isoDate();
+    try {
+        $('media').innerHTML = App.options(await App.api('/api/mis/media-commission/medias'), '', 'All media');
+    } catch (e) { App.toast(e.message, 'danger'); }
+    const kpi = (label, value) => `<div class="kpi"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+
+    async function load() {
+        const r = await App.run(() => App.api('/api/mis/media-commission' + App.qs({
+            from: $('from').value, to: $('to').value, mediaId: $('media').value, includeZero: $('zero').checked })), $('btnLoad'));
+        if (!r) return;
+        $('range').textContent = `${App.date(r.from)} – ${App.date(r.to)} · ${$('media').value ? $('media').selectedOptions[0].text : 'All media'}`;
+        $('kpis').innerHTML = [
+            kpi('Media', r.summary.filter(s => s.tests > 0).length + ' / ' + r.summary.length),
+            kpi('Invoices', r.totalInvoices), kpi('Tests', r.totalTests),
+            kpi('Bill (after discount)', App.money(r.totalBill)), kpi('Total commission', App.money(r.totalCommission)),
+        ].join('');
+        $('summary').innerHTML = r.summary.length ? r.summary.map((s, i) => `<tr class="${s.tests ? '' : 'text-muted'}">
+            <td>${i + 1}</td><td>${App.esc(s.code || '')}</td><td class="fw-semibold">${App.esc(s.media)}</td><td>${App.esc(s.phone || '')}</td>
+            <td class="text-end">${s.invoices}</td><td class="text-end">${s.tests}</td>
+            <td class="money">${App.money(s.billAmount)}</td><td class="money fw-bold">${App.money(s.commission)}</td>
+            <td class="text-end">${s.tests ? `<button class="btn btn-sm btn-outline-primary py-0" data-media="${s.mediaId}">Details</button>` : ''}</td></tr>`).join('')
+            : '<tr><td colspan="9" class="empty">No media found. Add media in Diagnostic → Media.</td></tr>';
+        $('summaryFoot').innerHTML = r.summary.length ? `<tr class="fw-bold"><td colspan="4">Total</td><td class="text-end">${r.totalInvoices}</td>
+            <td class="text-end">${r.totalTests}</td><td class="money">${App.money(r.totalBill)}</td><td class="money">${App.money(r.totalCommission)}</td><td></td></tr>` : '';
+        $('detailTitle').textContent = `Details (${r.details.length} test${r.details.length === 1 ? '' : 's'})`;
+        $('details').innerHTML = r.details.length ? r.details.map(d => `<tr>
+            <td>${App.esc(d.media)}</td><td class="small">${App.date(d.invoiceDate)}</td><td>${App.esc(d.invoiceNo)}</td><td>${App.esc(d.patientName)}</td>
+            <td>${App.esc(d.testName)}</td><td class="small">${App.esc(d.groupName)}</td>
+            <td class="money">${App.money(d.billAmount)}</td><td class="money fw-semibold">${App.money(d.commission)}</td>
+            <td class="money ${d.invoiceDue > 0 ? 'text-danger' : ''}">${App.money(d.invoiceDue)}</td></tr>`).join('')
+            : '<tr><td colspan="9" class="empty">No commission in this period.</td></tr>';
+    }
+
+    const reportQs = extra => App.qs({ FromDate: $('from').value, ToDate: $('to').value, MediaId: $('media').value, ...extra });
+    document.addEventListener('click', e => {
+        const b = e.target.closest('button'); if (!b) return;
+        if (b.dataset.media) { $('media').value = b.dataset.media; load(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+        if (b.dataset.pdf) App.report(`/api/reports/run/${b.dataset.pdf}${reportQs()}`);
+        if (b.dataset.csv) App.report(`/api/reports/run/${b.dataset.csv}${reportQs({ format: 'csv' })}`, { download: b.dataset.csv + '.csv' });
+    });
+    $('btnLoad').onclick = load;
+    ['media', 'zero'].forEach(id => $(id).onchange = load);
+    load();
+});
+</script>
+}

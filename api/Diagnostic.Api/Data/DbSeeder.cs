@@ -81,7 +81,13 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
         new(MenuCodes.Specimen, "Specimen", "/Master/Specimen", "bi-droplet-half"),
         new(MenuCodes.Doctor, "Doctor", "/Master/Doctor", "bi-person-badge"),
         new(MenuCodes.Patient, "Patient", "/Master/Patient", "bi-people"),
-        new(MenuCodes.DiagReports, "Reports", "/Reports", "bi-bar-chart"),
+    ];
+
+    /// <summary>MIS module: management reports.</summary>
+    private static readonly MenuSeed[] MisMenus =
+    [
+        new(MenuCodes.MisMediaCommission, "Media Commission", "/Mis/MediaCommission", "bi-cash-coin", 10, ["ACCOUNTS"]),
+        new(MenuCodes.DiagReports, "Reports", "/Reports", "bi-bar-chart", 20),
     ];
 
     private static readonly MenuSeed[] AdminMenus =
@@ -108,6 +114,13 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
     {
         var diag = await UpsertProjectAsync("DIAGNOSTIC", "Diagnostic", "bi-clipboard2-check", 1);
         var admin = await UpsertProjectAsync("ADMINISTRATIVE", "Administrative", "bi-clock", 2);
+        var misIsNew = !await db.Projects.IgnoreQueryFilters().AnyAsync(p => p.Code == "MIS");
+        var mis = await UpsertProjectAsync("MIS", "MIS", "bi-bar-chart-line", 3);
+
+        // When the MIS module is first created, the Reports menu moves there from Diagnostic (rights are kept – same menu row).
+        if (misIsNew)
+            await db.Menus.IgnoreQueryFilters().Where(m => m.Code == MenuCodes.DiagReports)
+                .ExecuteUpdateAsync(s => s.SetProperty(m => m.ProjectId, mis.Id).SetProperty(m => m.SortOrder, 20));
 
         var existing = await db.Menus.IgnoreQueryFilters().ToDictionaryAsync(m => m.Code ?? $"#{m.Id}");
         var added = new List<(Menu Menu, string[] Roles)>();
@@ -125,6 +138,7 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
         }
         Upsert(diag, DiagnosticMenus);
         Upsert(admin, AdminMenus);
+        Upsert(mis, MisMenus);
         await db.SaveChangesAsync();
 
         // Menus added to an existing database: give them to their default roles.
@@ -298,7 +312,7 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
         Grant(labTech, true, MenuCodes.SampleCollection, MenuCodes.SampleAck, MenuCodes.Sticker, MenuCodes.ResultEntry);
         Grant(pathologist, true, MenuCodes.SampleAck, MenuCodes.ReportFinalize);
         Grant(reception, true, MenuCodes.ReportDelivery);
-        Grant(accounts, true, MenuCodes.ReportDelivery, MenuCodes.Media, MenuCodes.MediaCommission);
+        Grant(accounts, true, MenuCodes.ReportDelivery, MenuCodes.Media, MenuCodes.MediaCommission, MenuCodes.MisMediaCommission);
         Grant(labTech, false, MenuCodes.InvoiceList);
         Grant(pathologist, true, MenuCodes.ResultEntry, MenuCodes.LabReport, MenuCodes.ReportParameter);
         Grant(pathologist, false, MenuCodes.TestItem, MenuCodes.InvoiceList);

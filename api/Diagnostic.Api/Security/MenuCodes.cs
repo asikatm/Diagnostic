@@ -50,5 +50,8 @@ public static class MenuCodes
     public const string Specimen = "DIAG_SPECIMEN";
     public const string Doctor = "DIAG_DOCTOR";
     public const string Patient = "DIAG_PATIENT";
-    public const string DiagReports = "DIAG_REPORTS";
+    public const string DiagReports = "DIAG_REPORTS"; // shown under the MIS module
+
+    // MIS
+    public const string MisMediaCommission = "MIS_MEDIA_COMMISSION";
 }
