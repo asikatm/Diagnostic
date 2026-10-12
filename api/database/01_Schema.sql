@@ -1896,3 +1896,170 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012164346_MediaCommission'
+)
+BEGIN
+    ALTER TABLE [diag].[Investigations] ADD [MediaCommission] decimal(18,2) NOT NULL DEFAULT 0.0;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012164346_MediaCommission'
+)
+BEGIN
+    ALTER TABLE [diag].[Investigations] ADD [MediaId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012164346_MediaCommission'
+)
+BEGIN
+    ALTER TABLE [diag].[InvestigationDetails] ADD [MediaCommission] decimal(18,2) NOT NULL DEFAULT 0.0;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012164346_MediaCommission'
+)
+BEGIN
+    ALTER TABLE [diag].[DiscountSetups] ADD [TestItemId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012164346_MediaCommission'
+)
+BEGIN
+    CREATE TABLE [diag].[Medias] (
+        [Id] int NOT NULL IDENTITY,
+        [Phone] nvarchar(250) NULL,
+        [Organization] nvarchar(250) NULL,
+        [Address] nvarchar(250) NULL,
+        [DefaultCommissionPercent] decimal(5,2) NOT NULL,
+        [IsActive] bit NOT NULL,
+        [IsDeleted] bit NOT NULL,
+        [CreatedBy] int NULL,
+        [CreatedAt] datetime2 NOT NULL,
+        [UpdatedBy] int NULL,
+        [UpdatedAt] datetime2 NULL,
+        [Code] nvarchar(30) NULL,
+        [Name] nvarchar(250) NOT NULL,
+        [SortOrder] int NOT NULL,
+        CONSTRAINT [PK_Medias] PRIMARY KEY ([Id])
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012164346_MediaCommission'
+)
+BEGIN
+    CREATE TABLE [diag].[MediaCommissionSetups] (
+        [Id] int NOT NULL IDENTITY,
+        [MediaId] int NULL,
+        [TestGroupId] int NULL,
+        [TestItemId] int NULL,
+        [CommissionType] nvarchar(30) NOT NULL,
+        [Value] decimal(18,2) NOT NULL,
+        [Remarks] nvarchar(250) NULL,
+        [IsActive] bit NOT NULL,
+        [IsDeleted] bit NOT NULL,
+        [CreatedBy] int NULL,
+        [CreatedAt] datetime2 NOT NULL,
+        [UpdatedBy] int NULL,
+        [UpdatedAt] datetime2 NULL,
+        CONSTRAINT [PK_MediaCommissionSetups] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_MediaCommissionSetups_Medias_MediaId] FOREIGN KEY ([MediaId]) REFERENCES [diag].[Medias] ([Id]),
+        CONSTRAINT [FK_MediaCommissionSetups_TestGroups_TestGroupId] FOREIGN KEY ([TestGroupId]) REFERENCES [diag].[TestGroups] ([Id]),
+        CONSTRAINT [FK_MediaCommissionSetups_TestItems_TestItemId] FOREIGN KEY ([TestItemId]) REFERENCES [diag].[TestItems] ([Id])
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012164346_MediaCommission'
+)
+BEGIN
+    CREATE INDEX [IX_Investigations_MediaId] ON [diag].[Investigations] ([MediaId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012164346_MediaCommission'
+)
+BEGIN
+    CREATE INDEX [IX_DiscountSetups_TestItemId] ON [diag].[DiscountSetups] ([TestItemId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012164346_MediaCommission'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_MediaCommissionSetups_MediaId_TestGroupId_TestItemId] ON [diag].[MediaCommissionSetups] ([MediaId], [TestGroupId], [TestItemId]) WHERE [IsDeleted] = 0');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012164346_MediaCommission'
+)
+BEGIN
+    CREATE INDEX [IX_MediaCommissionSetups_TestGroupId] ON [diag].[MediaCommissionSetups] ([TestGroupId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012164346_MediaCommission'
+)
+BEGIN
+    CREATE INDEX [IX_MediaCommissionSetups_TestItemId] ON [diag].[MediaCommissionSetups] ([TestItemId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012164346_MediaCommission'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_Medias_Code] ON [diag].[Medias] ([Code]) WHERE [Code] IS NOT NULL AND [IsDeleted] = 0');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012164346_MediaCommission'
+)
+BEGIN
+    CREATE INDEX [IX_Medias_Phone] ON [diag].[Medias] ([Phone]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012164346_MediaCommission'
+)
+BEGIN
+    ALTER TABLE [diag].[DiscountSetups] ADD CONSTRAINT [FK_DiscountSetups_TestItems_TestItemId] FOREIGN KEY ([TestItemId]) REFERENCES [diag].[TestItems] ([Id]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012164346_MediaCommission'
+)
+BEGIN
+    ALTER TABLE [diag].[Investigations] ADD CONSTRAINT [FK_Investigations_Medias_MediaId] FOREIGN KEY ([MediaId]) REFERENCES [diag].[Medias] ([Id]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012164346_MediaCommission'
+)
+BEGIN
+    INSERT INTO [admin].[__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261012164346_MediaCommission', N'10.0.12');
+END;
+
+COMMIT;
+GO
+

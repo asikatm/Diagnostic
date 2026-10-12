@@ -42,6 +42,8 @@ public class CreateInvestigationDto
     public PatientInput? Patient { get; set; }
     public string? PatientAge { get; set; }
     public int? ReferDoctorId { get; set; }
+    /// <summary>Media / agent who brought the patient (earns commission).</summary>
+    public int? MediaId { get; set; }
     public int? OpdPackageId { get; set; }
     public int? DiscountSetupId { get; set; }
     public List<InvestigationLineInput> Tests { get; set; } = [];
@@ -65,7 +67,8 @@ public record InvoicePaymentDto(int Id, string ReceiptNo, DateTime PaymentDate, 
 public record InvoiceDto(int Id, string InvoiceNo, DateTime InvoiceDate, int PatientId, string PatientCode, string PatientName,
     Gender Gender, string? PatientAge, string? Phone, string? Address, string? ReferDoctor, string? PackageName,
     decimal GrossAmount, decimal DiscountAmount, decimal VatAmount, decimal NetAmount, decimal PaidAmount, decimal RefundAmount,
-    decimal DueAmount, InvestigationStatus Status, string? Remarks, List<InvoiceDetailDto> Details, List<InvoicePaymentDto> Payments);
+    decimal DueAmount, InvestigationStatus Status, string? Remarks, List<InvoiceDetailDto> Details, List<InvoicePaymentDto> Payments,
+    string? MediaName, decimal MediaCommission);
 
 public record CreateInvestigationResult(int InvestigationId, string InvoiceNo, int? PaymentId, string? ReceiptNo, decimal NetAmount, decimal DueAmount);
 
@@ -92,12 +95,14 @@ public class InvestigationService(DiagnosticDbContext db, NumberSequenceService 
             Patient = patient,
             PatientAge = dto.PatientAge ?? AgeText(patient.DateOfBirth),
             ReferDoctorId = dto.ReferDoctorId,
+            MediaId = dto.MediaId,
             OpdPackageId = dto.OpdPackageId,
             DiscountSetupId = dto.DiscountSetupId,
             Remarks = dto.Remarks,
         };
 
         var delivery = await DeliveryCalculator.CreateAsync(db, lines.Select(l => l.Item).ToList());
+        var commission = dto.MediaId.HasValue ? await MediaCommissionCalculator.CreateAsync(db, dto.MediaId.Value) : null;
         foreach (var l in lines)
         {
             var taxable = l.UnitPrice - l.Discount;
@@ -109,6 +114,7 @@ public class InvestigationService(DiagnosticDbContext db, NumberSequenceService 
                 DiscountAmount = l.Discount,
                 VatAmount = vat,
                 NetAmount = taxable + vat,
+                MediaCommission = commission?.For(l.Item, taxable) ?? 0,
                 DeliveryDateTime = delivery.For(l.Item, inv.InvoiceDate),
             });
         }
@@ -180,7 +186,8 @@ public class InvestigationService(DiagnosticDbContext db, NumberSequenceService 
                     d.TestItem.TestGroup!.Name, d.UnitPrice, d.DiscountAmount, d.VatAmount, d.NetAmount, d.Status, d.DeliveryDateTime,
                     d.SampleCollection!.SampleNo)).ToList(),
                 i.Payments.OrderBy(p => p.Id).Select(p => new InvoicePaymentDto(p.Id, p.ReceiptNo, p.PaymentDate, p.PaymentType,
-                    p.PaymentMode!.Name, p.PaymentChannel!.Name, p.Amount, p.TransactionRef)).ToList()))
+                    p.PaymentMode!.Name, p.PaymentChannel!.Name, p.Amount, p.TransactionRef)).ToList(),
+                i.Media!.Name, i.MediaCommission))
             .FirstOrDefaultAsync();
     }
 
@@ -275,7 +282,10 @@ public class InvestigationService(DiagnosticDbContext db, NumberSequenceService 
             if (setup.DoctorId.HasValue && setup.DoctorId != dto.ReferDoctorId)
                 throw new AppException($"Discount '{setup.Name}' is only for patients referred by the configured doctor.");
 
-            var eligible = lines.Where(l => setup.TestGroupId == null || l.Item.TestGroupId == setup.TestGroupId).ToList();
+            // Test wise (TestItemId) and/or group wise (TestGroupId) scheme; both empty = all tests.
+            var eligible = lines.Where(l => (setup.TestItemId == null || l.Item.Id == setup.TestItemId)
+                                            && (setup.TestGroupId == null || l.Item.TestGroupId == setup.TestGroupId)).ToList();
+            if (eligible.Count == 0) throw new AppException($"Discount '{setup.Name}' does not apply to any selected test.");
             if (setup.DiscountType == DiscountType.Percent)
                 foreach (var l in eligible)
                     l.Discount = Math.Min(l.MaxDiscount, l.Discount + Math.Round(l.UnitPrice * setup.Value / 100m, 2));
@@ -337,6 +347,7 @@ public static class InvoiceTotals
         inv.DiscountAmount = active.Sum(d => d.DiscountAmount);
         inv.VatAmount = active.Sum(d => d.VatAmount);
         inv.NetAmount = active.Sum(d => d.NetAmount);
+        inv.MediaCommission = active.Sum(d => d.MediaCommission); // cancelled tests earn no commission
         inv.PaidAmount = inv.Payments.Where(p => p.PaymentType != PaymentType.Refund && !p.IsDeleted).Sum(p => p.Amount);
         inv.RefundAmount = inv.Payments.Where(p => p.PaymentType == PaymentType.Refund && !p.IsDeleted).Sum(p => p.Amount);
         inv.DueAmount = inv.NetAmount - inv.PaidAmount + inv.RefundAmount;
@@ -383,4 +394,44 @@ public class DeliveryCalculator
         }
         return at;
     }
+}
+
+/// <summary>
+/// Media commission of one billed test, on its price after discount (before VAT).
+/// Order: test item rule → test group rule → media's default %. For each level a rule for this media wins over a rule for all media.
+/// </summary>
+public class MediaCommissionCalculator
+{
+    private readonly List<MediaCommissionSetup> _rules;
+    private readonly int _mediaId;
+    private readonly decimal _defaultPercent;
+
+    private MediaCommissionCalculator(List<MediaCommissionSetup> rules, int mediaId, decimal defaultPercent)
+    {
+        _rules = rules;
+        _mediaId = mediaId;
+        _defaultPercent = defaultPercent;
+    }
+
+    public static async Task<MediaCommissionCalculator> CreateAsync(DiagnosticDbContext db, int mediaId)
+    {
+        var media = await db.Medias.AsNoTracking().FirstOrDefaultAsync(m => m.Id == mediaId && m.IsActive)
+                    ?? throw new AppException("Selected media is not available.");
+        var rules = await db.MediaCommissionSetups.AsNoTracking()
+            .Where(r => r.IsActive && (r.MediaId == mediaId || r.MediaId == null)).ToListAsync();
+        return new MediaCommissionCalculator(rules, mediaId, media.DefaultCommissionPercent);
+    }
+
+    public decimal For(TestItem item, decimal amount)
+    {
+        var rule = Pick(r => r.TestItemId == item.Id)
+                   ?? Pick(r => r.TestItemId == null && r.TestGroupId == item.TestGroupId);
+        var value = rule is null
+            ? amount * _defaultPercent / 100m
+            : rule.CommissionType == DiscountType.Percent ? amount * rule.Value / 100m : Math.Min(rule.Value, amount);
+        return Math.Round(Math.Max(0, value), 2);
+    }
+
+    private MediaCommissionSetup? Pick(Func<MediaCommissionSetup, bool> match) =>
+        _rules.Where(match).OrderByDescending(r => r.MediaId == _mediaId).FirstOrDefault();
 }

@@ -248,3 +248,47 @@ BEGIN
     ORDER BY SUM(i.NetAmount) DESC;
 END
 GO
+
+-- ---------------- Media commission ----------------
+
+CREATE OR ALTER PROCEDURE diag.usp_Rpt_MediaCommissionSummary
+    @FromDate DATE,
+    @ToDate   DATE,
+    @MediaId  INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT m.Code AS [Code], m.Name AS [Media], ISNULL(m.Phone, '') AS [Phone],
+           COUNT(DISTINCT i.Id) AS [Invoices], COUNT(dt.Id) AS [Tests],
+           SUM(dt.UnitPrice - dt.DiscountAmount) AS [Bill (after discount)], SUM(dt.MediaCommission) AS [Commission]
+    FROM diag.Investigations i
+    JOIN diag.Medias m ON m.Id = i.MediaId
+    JOIN diag.InvestigationDetails dt ON dt.InvestigationId = i.Id AND dt.IsDeleted = 0 AND dt.Status <> 'Cancelled'
+    WHERE i.IsDeleted = 0 AND i.InvoiceDate >= @FromDate AND i.InvoiceDate < DATEADD(DAY, 1, @ToDate)
+      AND (@MediaId IS NULL OR i.MediaId = @MediaId)
+    GROUP BY m.Code, m.Name, m.Phone
+    ORDER BY SUM(dt.MediaCommission) DESC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE diag.usp_Rpt_MediaCommissionDetail
+    @FromDate DATE,
+    @ToDate   DATE,
+    @MediaId  INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT m.Name AS [Media], CONVERT(VARCHAR(10), i.InvoiceDate, 103) AS [Date], i.InvoiceNo AS [Invoice No], p.Name AS [Patient],
+           ti.Name AS [Test], tg.Name AS [Group], dt.UnitPrice - dt.DiscountAmount AS [Bill (after discount)],
+           dt.MediaCommission AS [Commission]
+    FROM diag.Investigations i
+    JOIN diag.Medias m ON m.Id = i.MediaId
+    JOIN diag.Patients p ON p.Id = i.PatientId
+    JOIN diag.InvestigationDetails dt ON dt.InvestigationId = i.Id AND dt.IsDeleted = 0 AND dt.Status <> 'Cancelled'
+    JOIN diag.TestItems ti ON ti.Id = dt.TestItemId
+    JOIN diag.TestGroups tg ON tg.Id = ti.TestGroupId
+    WHERE i.IsDeleted = 0 AND i.InvoiceDate >= @FromDate AND i.InvoiceDate < DATEADD(DAY, 1, @ToDate)
+      AND (@MediaId IS NULL OR i.MediaId = @MediaId)
+    ORDER BY m.Name, i.InvoiceDate, dt.Id;
+END
+GO

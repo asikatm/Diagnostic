@@ -58,7 +58,8 @@ App.ready(async () => {
         App.modal(`Invoice ${App.esc(inv.invoiceNo)}`, `
             <div class="row small mb-2">
                 <div class="col-md-6"><b>${App.esc(inv.patientName)}</b> (${App.esc(inv.patientCode)}) · ${App.esc(inv.patientAge || '')} ${App.esc(inv.gender)}<br>${App.esc(inv.phone || '')}</div>
-                <div class="col-md-6 text-md-end">${App.dateTime(inv.invoiceDate)}<br>Ref: ${App.esc(inv.referDoctor || 'Self')} ${inv.packageName ? '· Package: ' + App.esc(inv.packageName) : ''}</div>
+                <div class="col-md-6 text-md-end">${App.dateTime(inv.invoiceDate)}<br>Ref: ${App.esc(inv.referDoctor || 'Self')} ${inv.packageName ? '· Package: ' + App.esc(inv.packageName) : ''}
+                    ${inv.mediaName ? `<br>Media: <b>${App.esc(inv.mediaName)}</b> · Commission ${App.money(inv.mediaCommission)}` : ''}</div>
             </div>
             <table class="table table-sm"><thead><tr><th>Test</th><th>Sample</th><th>Delivery</th><th>Status</th><th class="text-end">Price</th><th class="text-end">Disc.</th><th class="text-end">Net</th></tr></thead>
             <tbody>${inv.details.map(d => `<tr><td>${App.esc(d.testName)}</td><td>${App.esc(d.sampleNo || '')}</td><td>${App.dateTime(d.deliveryDateTime)}</td>

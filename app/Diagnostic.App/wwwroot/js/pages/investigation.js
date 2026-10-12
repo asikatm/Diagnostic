@@ -14,6 +14,9 @@ App.ready(async () => {
     } catch (e) { App.toast(e.message, 'danger'); return; }
 
     $('referDoctor').innerHTML = App.options(lookups.doctors, '', 'Self');
+    $('media').innerHTML = App.options(lookups.medias || [], '', 'None');
+    $('media').onchange = () => $('mediaInfo').textContent = $('media').value
+        ? 'Commission is calculated from Media Commission Setup when the invoice is saved.' : '';
     $('package').innerHTML = App.options(packages.map(p => ({ id: p.id, name: `${p.name} (${App.money(p.packagePrice)})` })), '', '-- OPD package (optional) --');
     $('discountSetup').innerHTML = App.options(discounts.map(d => ({ id: d.id, name: `${d.name}` })), '', 'None');
     $('payMode').innerHTML = App.options(lookups.paymentModes, lookups.paymentModes.find(m => m.code === 'CASH')?.id, null);
@@ -143,7 +146,7 @@ App.ready(async () => {
         };
         const setup = discounts.find(d => String(d.id) === $('discountSetup').value);
         if (setup) {
-            const eligible = lines.filter(l => !setup.testGroupId || l.groupId === setup.testGroupId);
+            const eligible = lines.filter(l => (!setup.testItemId || l.id === setup.testItemId) && (!setup.testGroupId || l.groupId === setup.testGroupId));
             if (setup.discountType === 'Percent') eligible.forEach(l => l.disc = Math.min(l.max, round2(l.disc + l.price * setup.value / 100)));
             else spread(eligible, setup.value);
         }
@@ -200,7 +203,7 @@ App.ready(async () => {
     function clearAll() {
         setPatient(null);
         state.lines = []; state.pkg = null;
-        $('package').value = ''; $('discountSetup').value = ''; $('extraDiscount').value = 0; $('referDoctor').value = '';
+        $('package').value = ''; $('discountSetup').value = ''; $('extraDiscount').value = 0; $('referDoctor').value = ''; $('media').value = ''; $('mediaInfo').textContent = '';
         $('remarks').value = ''; $('payRef').value = ''; delete $('payAmount').dataset.touched;
         render();
         $('pName').focus();
@@ -221,6 +224,7 @@ App.ready(async () => {
             },
             patientAge: ageText(),
             referDoctorId: Number($('referDoctor').value) || null,
+            mediaId: Number($('media').value) || null,
             opdPackageId: state.pkg?.id ?? null,
             discountSetupId: Number($('discountSetup').value) || null,
             tests: state.lines.filter(l => !l.fromPackage).map(l => ({ testItemId: l.id, discountAmount: l.manual || 0 })),

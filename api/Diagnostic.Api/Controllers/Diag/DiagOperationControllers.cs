@@ -201,6 +201,8 @@ public class LookupsController(Data.DiagnosticDbContext db) : ControllerBase
     {
         var q = new
         {
+            medias = await db.Medias.Where(d => d.IsActive).OrderBy(d => d.Name)
+                .Select(d => new { d.Id, Name = d.Phone == null ? d.Name : d.Name + " (" + d.Phone + ")", d.Code }).ToListAsync(),
             doctors = await db.Doctors.Where(d => d.IsActive && d.IsReferrer).OrderBy(d => d.Name).Select(d => new LookupItem(d.Id, d.Name, d.Code)).ToListAsync(),
             signDoctors = await db.Doctors.Where(d => d.IsActive && d.IsReportSigner).OrderBy(d => d.Name).Select(d => new LookupItem(d.Id, d.Name, d.Code)).ToListAsync(),
             paymentModes = await db.PaymentModes.Where(d => d.IsActive).OrderBy(d => d.SortOrder).Select(d => new { d.Id, d.Name, d.Code, d.RequiresReference }).ToListAsync(),

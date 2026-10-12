@@ -114,16 +114,57 @@ public class LetterHeadsController(DiagnosticDbContext db) : CrudController<Lett
     }
 }
 
+[Route("api/diag/medias"), MenuCode(MenuCodes.Media)]
+public class MediasController(DiagnosticDbContext db) : CrudController<Media>(db)
+{
+    protected override IQueryable<Media> ApplySearch(IQueryable<Media> q, string search) =>
+        q.Where(x => x.Name.Contains(search) || x.Code!.Contains(search) || x.Phone!.Contains(search) || x.Organization!.Contains(search));
+
+    protected override Task ValidateAsync(Media model, Media? existing)
+    {
+        if (model.DefaultCommissionPercent is < 0 or > 100) throw new AppException("Default commission must be between 0 and 100 %.");
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>Media commission per test (test wise) or per test group (group wise), for one media or all.</summary>
+[Route("api/diag/media-commissions"), MenuCode(MenuCodes.MediaCommission)]
+public class MediaCommissionSetupsController(DiagnosticDbContext db) : CrudController<MediaCommissionSetup>(db)
+{
+    protected override IQueryable<MediaCommissionSetup> Query() =>
+        base.Query().Include(x => x.Media).Include(x => x.TestGroup).Include(x => x.TestItem);
+
+    protected override IQueryable<MediaCommissionSetup> ApplySearch(IQueryable<MediaCommissionSetup> q, string search) =>
+        q.Where(x => x.Media!.Name.Contains(search) || x.TestGroup!.Name.Contains(search) || x.TestItem!.Name.Contains(search));
+
+    protected override IQueryable<MediaCommissionSetup> ApplyOrder(IQueryable<MediaCommissionSetup> q) =>
+        q.OrderBy(x => x.MediaId).ThenBy(x => x.TestGroupId).ThenBy(x => x.TestItemId);
+
+    protected override async Task ValidateAsync(MediaCommissionSetup model, MediaCommissionSetup? existing)
+    {
+        if (model.TestItemId is null && model.TestGroupId is null) throw new AppException("Select a test item (test wise) or a test group (group wise).");
+        if (model.Value < 0) throw new AppException("Commission cannot be negative.");
+        if (model.CommissionType == DiscountType.Percent && model.Value > 100) throw new AppException("Percent commission cannot exceed 100.");
+        if (model.TestItemId.HasValue)
+            model.TestGroupId = await Db.TestItems.Where(t => t.Id == model.TestItemId).Select(t => (int?)t.TestGroupId).FirstOrDefaultAsync(); // keep group in sync
+        if (await Db.MediaCommissionSetups.AnyAsync(x => x.Id != model.Id && x.MediaId == model.MediaId
+                && x.TestItemId == model.TestItemId && (model.TestItemId != null || x.TestGroupId == model.TestGroupId)))
+            throw new AppException("A commission rule for this media and test / group already exists.");
+    }
+}
+
 [Route("api/diag/discount-setups"), MenuCode(MenuCodes.Discount)]
 public class DiscountSetupsController(DiagnosticDbContext db) : CrudController<DiscountSetup>(db)
 {
-    protected override IQueryable<DiscountSetup> Query() => base.Query().Include(x => x.TestGroup).Include(x => x.Doctor);
+    protected override IQueryable<DiscountSetup> Query() => base.Query().Include(x => x.TestGroup).Include(x => x.TestItem).Include(x => x.Doctor);
 
-    protected override Task ValidateAsync(DiscountSetup model, DiscountSetup? existing)
+    protected override async Task ValidateAsync(DiscountSetup model, DiscountSetup? existing)
     {
         if (model.Value < 0) throw new AppException("Discount value cannot be negative.");
         if (model.DiscountType == DiscountType.Percent && model.Value > 100) throw new AppException("Percent discount cannot exceed 100.");
-        return Task.CompletedTask;
+        if (model.TestItemId.HasValue && model.TestGroupId.HasValue &&
+            !await Db.TestItems.AnyAsync(t => t.Id == model.TestItemId && t.TestGroupId == model.TestGroupId))
+            throw new AppException("The selected test does not belong to the selected test group.");
     }
 
     /// <summary>Discounts valid today (used by Investigation Entry).</summary>
@@ -134,7 +175,7 @@ public class DiscountSetupsController(DiagnosticDbContext db) : CrudController<D
         return Ok(await Db.DiscountSetups.AsNoTracking()
             .Where(x => x.IsActive && (x.ValidFrom == null || x.ValidFrom <= today) && (x.ValidTo == null || x.ValidTo >= today))
             .OrderBy(x => x.Name)
-            .Select(x => new { x.Id, x.Name, x.DiscountType, x.Value, x.TestGroupId, x.DoctorId })
+            .Select(x => new { x.Id, x.Name, x.DiscountType, x.Value, x.TestGroupId, x.TestItemId, x.DoctorId })
             .ToListAsync());
     }
 }

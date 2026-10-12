@@ -71,6 +71,8 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
         new(MenuCodes.TestItem, "Test Item", "/Master/TestItem", "bi-eyedropper"),
         new(MenuCodes.ReportParameter, "REPORT PARAMETER", "/Master/ReportParameter", "bi-sliders"),
         new(MenuCodes.Discount, "Discount", "/Master/DiscountSetup", "bi-percent"),
+        new(MenuCodes.Media, "Media", "/Master/Media", "bi-person-vcard", 152, ["ACCOUNTS"]),
+        new(MenuCodes.MediaCommission, "Media Commission Setup", "/Master/MediaCommissionSetup", "bi-cash-stack", 154, ["ACCOUNTS"]),
         new(MenuCodes.VacuMachine, "Vacu And Machine Group Mapping", "/Master/VacuMachineMapping", "bi-diagram-2"),
         new(MenuCodes.DeliveryTime, "Report Delivery Time Set", "/Master/ReportDeliveryTime", "bi-clock-history"),
         new(MenuCodes.LetterHead, "Letter Head Setup", "/Master/LetterHead", "bi-card-heading"),
@@ -166,6 +168,10 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
         new("DUE_LIST", "Due List", "diag.usp_Rpt_DueList", "Tabular", DateRange),
         new("CANCEL_REFUND", "Cancel & Refund Report", "diag.usp_Rpt_CancelRefund", "Tabular", DateRange, "Landscape"),
         new("DOCTOR_WISE_REFERRAL", "Doctor Wise Referral", "diag.usp_Rpt_DoctorWiseReferral", "Tabular", DateRange),
+        new("MEDIA_COMMISSION_SUMMARY", "Media Commission Summary", "diag.usp_Rpt_MediaCommissionSummary", "Tabular",
+            [..DateRange, new("@MediaId", "Media", "media", false)]),
+        new("MEDIA_COMMISSION_DETAIL", "Media Commission Detail", "diag.usp_Rpt_MediaCommissionDetail", "Tabular",
+            [..DateRange, new("@MediaId", "Media", "media", false)], "Landscape"),
     ];
 
     private async Task SeedReportsAsync()
@@ -173,11 +179,12 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
         var project = await db.Projects.FirstAsync(p => p.Code == "DIAGNOSTIC");
         var codes = await db.Reports.IgnoreQueryFilters().Select(r => r.Code).ToListAsync();
         var sort = 10;
+        var accounts = await db.Roles.FirstOrDefaultAsync(x => x.Code == "ACCOUNTS"); // null on a brand-new database
         foreach (var r in ReportSeeds)
         {
             sort += 10;
             if (codes.Contains(r.Code)) continue;
-            db.Reports.Add(new Report
+            var report = new Report
             {
                 Code = r.Code, Name = r.Name, ProcedureName = r.Proc, Template = r.Template, Orientation = r.Orientation,
                 ProjectId = project.Id, SortOrder = sort,
@@ -185,7 +192,11 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
                 {
                     ParamName = p.Name, Label = p.Label, DataType = p.Type, IsRequired = p.Required, DefaultValue = p.Default, SortOrder = i + 1,
                 }).ToList(),
-            });
+            };
+            db.Reports.Add(report);
+            // Report added to an existing database: Accounts may run it (new databases get permissions in SeedAdminAsync).
+            if (accounts != null)
+                db.ReportPermissions.Add(new ReportPermission { Role = accounts, Report = report, CanView = true, CanExport = true });
         }
         await db.SaveChangesAsync();
     }
@@ -287,7 +298,7 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
         Grant(labTech, true, MenuCodes.SampleCollection, MenuCodes.SampleAck, MenuCodes.Sticker, MenuCodes.ResultEntry);
         Grant(pathologist, true, MenuCodes.SampleAck, MenuCodes.ReportFinalize);
         Grant(reception, true, MenuCodes.ReportDelivery);
-        Grant(accounts, true, MenuCodes.ReportDelivery);
+        Grant(accounts, true, MenuCodes.ReportDelivery, MenuCodes.Media, MenuCodes.MediaCommission);
         Grant(labTech, false, MenuCodes.InvoiceList);
         Grant(pathologist, true, MenuCodes.ResultEntry, MenuCodes.LabReport, MenuCodes.ReportParameter);
         Grant(pathologist, false, MenuCodes.TestItem, MenuCodes.InvoiceList);
@@ -467,7 +478,14 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
         db.DiscountSetups.AddRange(
             new DiscountSetup { Code = "STAFF", Name = "Staff Discount 20%", DiscountType = DiscountType.Percent, Value = 20 },
             new DiscountSetup { Code = "SENIOR", Name = "Senior Citizen 10%", DiscountType = DiscountType.Percent, Value = 10 },
-            new DiscountSetup { Code = "PATH15", Name = "Pathology Campaign 15%", DiscountType = DiscountType.Percent, Value = 15, TestGroup = hema });
+            new DiscountSetup { Code = "PATH15", Name = "Pathology Campaign 15%", DiscountType = DiscountType.Percent, Value = 15, TestGroup = hema },
+            new DiscountSetup { Code = "USG10", Name = "USG Whole Abdomen 10%", DiscountType = DiscountType.Percent, Value = 10, TestItem = usgWa });
+
+        var media = new Media { Code = "M001", Name = "Sample Media", Phone = "01800-000000", Organization = "Local agent", DefaultCommissionPercent = 10 };
+        db.Medias.Add(media);
+        db.MediaCommissionSetups.AddRange(
+            new MediaCommissionSetup { TestGroup = usg, CommissionType = DiscountType.Percent, Value = 20, Remarks = "All media – ultrasonography" },
+            new MediaCommissionSetup { TestItem = cbc, TestGroup = hema, CommissionType = DiscountType.Flat, Value = 50, Remarks = "All media – CBC" });
 
         db.LetterHeads.Add(new LetterHead
         {

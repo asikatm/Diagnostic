@@ -40,6 +40,8 @@ public static class MenuCodes
     public const string TestItem = "DIAG_TEST_ITEM";
     public const string ReportParameter = "DIAG_REPORT_PARAMETER";
     public const string Discount = "DIAG_DISCOUNT";
+    public const string Media = "DIAG_MEDIA";
+    public const string MediaCommission = "DIAG_MEDIA_COMMISSION";
     public const string VacuMachine = "DIAG_VACU_MACHINE";
     public const string DeliveryTime = "DIAG_DELIVERY_TIME";
     public const string LetterHead = "DIAG_LETTER_HEAD";

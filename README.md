@@ -61,7 +61,13 @@ Schema change: edit the entity + `DiagnosticDbContext`, then
 
 ## Workflow
 
-1. **Investigation Entry** – choose or register the patient, add tests / an OPD package, apply a discount, take payment → money receipt.
+1. **Investigation Entry** – choose or register the patient, pick the **Media** (agent) if any, add tests / an OPD package,
+   apply a discount, take payment → money receipt.
+   - *Discount* schemes can be test wise (one test), group wise (one test group) or for all tests.
+   - *Media commission* is stored per test line at billing. The rules come from **Media Commission Setup**: a test wise rule wins
+     over a group wise rule, and a rule for one media wins over a rule for all media. If no rule matches, the media's default % applies.
+     The base is the test price after discount, before VAT. Cancelled tests earn no commission.
+     Reports: *Media Commission Summary / Detail*.
    Delivery time per test comes from *Report Delivery Time Set* (test item rule → test group rule → `Diag.DefaultDeliveryHours`).
 2. **Sample Collection** – three tabs:
    - *Pending Collection*: collect one test, a whole invoice, or tests from several invoices at once (select all).

@@ -138,7 +138,7 @@ public class ReportRepository(IConfiguration config)
         {
             return p.DataType.ToLowerInvariant() switch
             {
-                "int" or "testgroup" => int.Parse(raw, CultureInfo.InvariantCulture),
+                "int" or "testgroup" or "media" => int.Parse(raw, CultureInfo.InvariantCulture),
                 "decimal" => decimal.Parse(raw, CultureInfo.InvariantCulture),
                 "bool" => raw is "1" or "true" or "True",
                 "date" => raw.Equals("today", StringComparison.OrdinalIgnoreCase) ? DateTime.Today : DateTime.Parse(raw, CultureInfo.InvariantCulture),

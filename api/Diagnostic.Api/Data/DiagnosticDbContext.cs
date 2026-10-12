@@ -49,6 +49,8 @@ public class DiagnosticDbContext(DbContextOptions<DiagnosticDbContext> options, 
     public DbSet<LetterHead> LetterHeads => Set<LetterHead>();
     public DbSet<Doctor> Doctors => Set<Doctor>();
     public DbSet<DiscountSetup> DiscountSetups => Set<DiscountSetup>();
+    public DbSet<Media> Medias => Set<Media>();
+    public DbSet<MediaCommissionSetup> MediaCommissionSetups => Set<MediaCommissionSetup>();
     public DbSet<Patient> Patients => Set<Patient>();
     public DbSet<Investigation> Investigations => Set<Investigation>();
     public DbSet<InvestigationDetail> InvestigationDetails => Set<InvestigationDetail>();
@@ -243,6 +245,20 @@ public class DiagnosticDbContext(DbContextOptions<DiagnosticDbContext> options, 
         b.Entity<LetterHead>(e => { e.ToTable("LetterHeads", s); UniqueCode(e); e.Property(x => x.FooterText).HasMaxLength(1000); });
         b.Entity<Doctor>(e => { e.ToTable("Doctors", s); UniqueCode(e); e.Property(x => x.CommissionPercent).HasPrecision(5, 2); });
         b.Entity<DiscountSetup>(e => { e.ToTable("DiscountSetups", s); UniqueCode(e); });
+
+        b.Entity<Media>(e =>
+        {
+            e.ToTable("Medias", s);
+            UniqueCode(e);
+            e.Property(x => x.DefaultCommissionPercent).HasPrecision(5, 2);
+            e.HasIndex(x => x.Phone);
+        });
+
+        b.Entity<MediaCommissionSetup>(e =>
+        {
+            e.ToTable("MediaCommissionSetups", s);
+            e.HasIndex(x => new { x.MediaId, x.TestGroupId, x.TestItemId }).IsUnique().HasFilter("[IsDeleted] = 0");
+        });
 
         b.Entity<Patient>(e =>
         {

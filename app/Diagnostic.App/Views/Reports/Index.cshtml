@@ -35,7 +35,8 @@ App.ready(async () => {
             case 'date': return `<input type="date" class="form-control" id="${id}" value="${def}">`;
             case 'int': case 'decimal': return `<input type="number" class="form-control" id="${id}" value="${App.esc(def)}">`;
             case 'bool': return `<select class="form-select" id="${id}"><option value="">--</option><option value="true">Yes</option><option value="false">No</option></select>`;
-            case 'testgroup': return `<select class="form-select" id="${id}">${App.options((await App.api('/api/diag/lookups/billing')).testGroups, def, 'All')}</select>`;
+            case 'testgroup': return `<select class="form-select" id="${id}">${App.options((await App.lookup('/api/diag/lookups/billing')).testGroups, def, 'All')}</select>`;
+            case 'media': return `<select class="form-select" id="${id}">${App.options((await App.lookup('/api/diag/lookups/billing')).medias, def, 'All media')}</select>`;
             default: return `<input class="form-control" id="${id}" value="${App.esc(def)}">`;
         }
     }

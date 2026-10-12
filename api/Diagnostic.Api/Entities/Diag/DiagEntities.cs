@@ -153,12 +153,42 @@ public class Doctor : MasterEntity
     public decimal CommissionPercent { get; set; }
 }
 
+/// <summary>Media / agent who refers patients and earns commission on their tests.</summary>
+public class Media : MasterEntity
+{
+    public string? Phone { get; set; }
+    public string? Organization { get; set; }
+    public string? Address { get; set; }
+    /// <summary>Used when no Media Commission Setup row matches a test.</summary>
+    public decimal DefaultCommissionPercent { get; set; }
+}
+
+/// <summary>
+/// Media commission rule. Matching order for a billed test: test item rule → test group rule → media default %.
+/// A rule with no media applies to every media (a media-specific rule wins over it).
+/// </summary>
+public class MediaCommissionSetup : BaseEntity
+{
+    public int? MediaId { get; set; }
+    public Media? Media { get; set; }
+    public int? TestGroupId { get; set; }
+    public TestGroup? TestGroup { get; set; }
+    public int? TestItemId { get; set; }
+    public TestItem? TestItem { get; set; }
+    public DiscountType CommissionType { get; set; } = DiscountType.Percent;
+    public decimal Value { get; set; }
+    public string? Remarks { get; set; }
+}
+
+/// <summary>Discount scheme. Limit it to one test (test wise) or one test group (group wise); empty = all tests.</summary>
 public class DiscountSetup : MasterEntity
 {
     public DiscountType DiscountType { get; set; } = DiscountType.Percent;
     public decimal Value { get; set; }
     public int? TestGroupId { get; set; }
     public TestGroup? TestGroup { get; set; }
+    public int? TestItemId { get; set; }
+    public TestItem? TestItem { get; set; }
     public int? DoctorId { get; set; }
     public Doctor? Doctor { get; set; }
     public DateOnly? ValidFrom { get; set; }
@@ -196,6 +226,10 @@ public class Investigation : BaseEntity
     public string? PatientAge { get; set; }
     public int? ReferDoctorId { get; set; }
     public Doctor? ReferDoctor { get; set; }
+    public int? MediaId { get; set; }
+    public Media? Media { get; set; }
+    /// <summary>Sum of line commissions of non-cancelled tests.</summary>
+    public decimal MediaCommission { get; set; }
     public int? OpdPackageId { get; set; }
     public OpdPackage? OpdPackage { get; set; }
     public int? DiscountSetupId { get; set; }
@@ -223,6 +257,8 @@ public class InvestigationDetail : BaseEntity
     public decimal DiscountAmount { get; set; }
     public decimal VatAmount { get; set; }
     public decimal NetAmount { get; set; }
+    /// <summary>Media commission earned on this test (calculated at billing from Media Commission Setup).</summary>
+    public decimal MediaCommission { get; set; }
     public TestStatus Status { get; set; } = TestStatus.Ordered;
     public DateTime? DeliveryDateTime { get; set; }
     public int? SampleCollectionId { get; set; }
