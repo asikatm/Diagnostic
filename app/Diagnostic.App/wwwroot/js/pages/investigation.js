@@ -75,32 +75,52 @@ App.ready(async () => {
         $('patientInfo').classList.toggle('d-none', !p);
         if (p) {
             $('pName').value = p.name; $('pGender').value = p.gender; $('pPhone').value = p.phone || ''; $('pAddress').value = p.address || '';
-            $('pDob').value = p.dateOfBirth || ''; $('pAgeY').value = ''; $('pAgeM').value = '';
-            if (p.dateOfBirth) {
-                const dob = new Date(p.dateOfBirth), now = new Date();
-                let months = (now.getFullYear() - dob.getFullYear()) * 12 + now.getMonth() - dob.getMonth();
-                if (now.getDate() < dob.getDate()) months--;
-                $('pAgeY').value = Math.floor(months / 12); $('pAgeM').value = months % 12;
-            }
+            $('pDob').value = p.dateOfBirth || '';
+            fillAgeFromDob();
             $('patientInfo').innerHTML = `Existing patient <b>${App.esc(p.patientCode)}</b>`;
         } else {
-            ['pName', 'pPhone', 'pAddress', 'pDob', 'pAgeY', 'pAgeM'].forEach(id => $(id).value = '');
+            ['pName', 'pPhone', 'pAddress', 'pDob', 'pAgeY', 'pAgeM', 'pAgeD'].forEach(id => $(id).value = '');
         }
     }
     $('btnNewPatient').onclick = () => setPatient(null);
 
+    // ------------------------------------------------------------ age <-> date of birth
+    // Typing Y / M / D fills the date of birth; picking a date of birth fills Y / M / D.
+    const num = id => Math.max(0, Math.floor(Number($(id).value || 0)));
+
+    function fillDobFromAge() {
+        const y = num('pAgeY'), m = num('pAgeM'), d = num('pAgeD');
+        if (!y && !m && !d) { $('pDob').value = ''; return; }
+        const dob = new Date();
+        dob.setFullYear(dob.getFullYear() - y);
+        dob.setMonth(dob.getMonth() - m);
+        dob.setDate(dob.getDate() - d);
+        $('pDob').value = App.isoDate(dob);
+    }
+
+    function fillAgeFromDob() {
+        ['pAgeY', 'pAgeM', 'pAgeD'].forEach(id => $(id).value = '');
+        if (!$('pDob').value) return;
+        const dob = new Date($('pDob').value + 'T00:00:00'), now = new Date();
+        now.setHours(0, 0, 0, 0);
+        if (dob > now) { App.toast('Date of birth cannot be in the future.', 'warning'); $('pDob').value = ''; return; }
+        let y = now.getFullYear() - dob.getFullYear(), m = now.getMonth() - dob.getMonth(), d = now.getDate() - dob.getDate();
+        if (d < 0) { m--; d += new Date(now.getFullYear(), now.getMonth(), 0).getDate(); } // days of previous month
+        if (m < 0) { y--; m += 12; }
+        $('pAgeY').value = y; $('pAgeM').value = m; $('pAgeD').value = d;
+    }
+
+    ['pAgeY', 'pAgeM', 'pAgeD'].forEach(id => $(id).addEventListener('input', fillDobFromAge));
+    $('pDob').addEventListener('change', fillAgeFromDob);
+
     function ageText() {
-        const y = Number($('pAgeY').value || 0), m = Number($('pAgeM').value || 0);
-        if (y || m) return [y ? `${y} Y` : '', m ? `${m} M` : ''].filter(Boolean).join(' ');
-        return null;
+        const y = num('pAgeY'), m = num('pAgeM'), d = num('pAgeD');
+        if (!y && !m && !d) return null;
+        // Adults: years only; children: years + months; infants: months + days.
+        const parts = y >= 5 ? [`${y} Y`] : [y ? `${y} Y` : '', m ? `${m} M` : '', !y && d ? `${d} D` : ''];
+        return parts.filter(Boolean).join(' ') || `${d} D`;
     }
-    function dobFromAge() {
-        if ($('pDob').value) return $('pDob').value;
-        const y = Number($('pAgeY').value || 0), m = Number($('pAgeM').value || 0);
-        if (!y && !m) return null;
-        const d = new Date(); d.setMonth(d.getMonth() - (y * 12 + m));
-        return App.isoDate(d);
-    }
+    const dobFromAge = () => $('pDob').value || null;
 
     // ------------------------------------------------------------ tests
     autocomplete($('testSearch'), $('testResults'),
