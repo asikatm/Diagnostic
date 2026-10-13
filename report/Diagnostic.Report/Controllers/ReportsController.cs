@@ -67,7 +67,8 @@ public class ReportsController(ReportRepository repo, IConfiguration config) : C
     public async Task<IActionResult> Run(string code, [FromQuery] string format = "pdf")
     {
         var csv = format.Equals("csv", StringComparison.OrdinalIgnoreCase);
-        var def = await repo.GetAsync(code, SuperAdmin, RoleIds, export: csv);
+        var excel = format.Equals("xlsx", StringComparison.OrdinalIgnoreCase) || format.Equals("excel", StringComparison.OrdinalIgnoreCase);
+        var def = await repo.GetAsync(code, SuperAdmin, RoleIds, export: csv || excel);
 
         switch (def.Template)
         {
@@ -83,6 +84,9 @@ public class ReportsController(ReportRepository repo, IConfiguration config) : C
 
         var data = await repo.TabularAsync(def, Request.Query);
         if (csv) return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(ToCsv(data))).ToArray(), "text/csv", $"{def.Code}.csv");
+        if (excel)
+            return File(ExcelExport.Build(data), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"{def.Code}-{DateTime.Now:yyyyMMdd-HHmm}.xlsx");
 
         var lh = await repo.LetterHeadAsync(null, null);
         var pdf = new TabularDocument(data, lh, def.Orientation == "Landscape").GeneratePdf();

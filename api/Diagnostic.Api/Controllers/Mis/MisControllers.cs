@@ -15,6 +15,28 @@ public record MediaCommissionDetailRow(int MediaId, string Media, int Investigat
 public record MediaCommissionResult(DateTime From, DateTime To, List<MediaCommissionSummaryRow> Summary, List<MediaCommissionDetailRow> Details,
     int TotalInvoices, int TotalTests, decimal TotalBill, decimal TotalCommission);
 
+/// <summary>Dropdown data for the MIS report filter panel (Common / Diagnostic / Marketing sections).</summary>
+[ApiController, Route("api/mis/filters"), MenuCode(MenuCodes.DiagReports)]
+public class MisFiltersController(DiagnosticDbContext db) : ControllerBase
+{
+    [HttpGet]
+    public async Task<IActionResult> Get() => Ok(new
+    {
+        tenants = await db.Tenants.AsNoTracking().OrderBy(x => x.SortOrder).ThenBy(x => x.Name).Select(x => new LookupItem(x.Id, x.Name, x.Code)).ToListAsync(),
+        doctors = await db.Doctors.AsNoTracking().Where(x => x.IsReferrer).OrderBy(x => x.Name).Select(x => new LookupItem(x.Id, x.Name, x.Code)).ToListAsync(),
+        users = await db.Users.AsNoTracking().OrderBy(x => x.FullName).Select(x => new LookupItem(x.Id, x.FullName + " (" + x.UserName + ")", x.UserName)).ToListAsync(),
+        parentGroups = await db.ParentGroups.AsNoTracking().OrderBy(x => x.SortOrder).Select(x => new LookupItem(x.Id, x.Name, x.Code)).ToListAsync(),
+        testGroups = await db.TestGroups.AsNoTracking().OrderBy(x => x.SortOrder)
+            .Select(x => new { x.Id, x.Name, x.Code, x.ParentGroupId }).ToListAsync(),
+        testItems = await db.TestItems.AsNoTracking().OrderBy(x => x.Name)
+            .Select(x => new { x.Id, x.Name, x.Code, x.TestGroupId, x.TestGroup!.ParentGroupId }).ToListAsync(),
+        paymentModes = await db.PaymentModes.AsNoTracking().OrderBy(x => x.SortOrder).Select(x => new LookupItem(x.Id, x.Name, x.Code)).ToListAsync(),
+        medias = await db.Medias.AsNoTracking().OrderBy(x => x.Name).Select(x => new LookupItem(x.Id, x.Name, x.Code)).ToListAsync(),
+        discountSetups = await db.DiscountSetups.AsNoTracking().OrderBy(x => x.Name).Select(x => new LookupItem(x.Id, x.Name, x.Code)).ToListAsync(),
+        packages = await db.OpdPackages.AsNoTracking().OrderBy(x => x.Name).Select(x => new LookupItem(x.Id, x.Name, x.Code)).ToListAsync(),
+    });
+}
+
 /// <summary>MIS → Media Commission: commission earned by every media (or one media) in a date range.</summary>
 [ApiController, Route("api/mis/media-commission"), MenuCode(MenuCodes.MisMediaCommission)]
 public class MisMediaCommissionController(DiagnosticDbContext db) : ControllerBase

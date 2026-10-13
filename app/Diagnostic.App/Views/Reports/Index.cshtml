@@ -1,67 +1,163 @@
 @{
-    ViewData["Title"] = "Reports";
+    ViewData["Title"] = "MIS Reports";
 }
 <div class="page-head">
-    <div><h1>Reports</h1><div class="sub">MIS reports from "Reports and Sp Mapping"</div></div>
+    <a href="/" class="btn btn-sm btn-light rounded-circle" title="Back"><i class="bi bi-arrow-left"></i></a>
+    <div><h1>MIS REPORTS</h1></div>
+    <nav class="ms-auto small"><a href="/" class="text-decoration-none"><i class="bi bi-house-door-fill"></i> HIS ERP</a>
+        <span class="text-muted"> / MIS / MIS Reports</span></nav>
 </div>
-<div class="row g-3">
-    <div class="col-lg-4">
-        <div class="card"><div class="list-group list-group-flush" id="list"><div class="empty">Loading…</div></div></div>
+
+<div class="card mis-panel">
+    <div class="card-body">
+        <div class="row g-0">
+            <!-- ================= Common ================= -->
+            <div class="col-lg-4 mis-col">
+                <div class="sec-title"><span>Common Section</span></div>
+                <div class="mb-3">
+                    <label class="form-label required" for="report">Report Name</label>
+                    <select class="form-select" id="report"></select>
+                    <div class="form-text" id="reportInfo"></div>
+                </div>
+                <div class="mb-3" data-param="TenantId"><label class="form-label">Tenant Name</label><select class="form-select" data-src="tenants"></select></div>
+                <div class="mb-3">
+                    <label class="form-label d-block">Report Type</label>
+                    <div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="fmt" id="fmtPdf" value="pdf" checked><label class="form-check-label" for="fmtPdf">PDF</label></div>
+                    <div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="fmt" id="fmtXlsx" value="xlsx"><label class="form-check-label" for="fmtXlsx">Excel</label></div>
+                </div>
+                <div class="mb-3" data-param="FromDate"><label class="form-label">From Date</label><input type="date" class="form-control" id="fromDate"></div>
+                <div class="mb-3" data-param="ToDate"><label class="form-label">To Date</label><input type="date" class="form-control" id="toDate"></div>
+                <div class="mb-3" data-param="Year"><label class="form-label">Year</label><input type="number" class="form-control" id="year" min="2000" max="2100"></div>
+                <div class="mb-3" data-param="Month"><label class="form-label">Month</label><select class="form-select" id="month"></select></div>
+                <div id="otherParams"></div>
+            </div>
+
+            <!-- ================= Diagnostic ================= -->
+            <div class="col-lg-4 mis-col">
+                <div class="sec-title"><span>Diagnostic Section</span></div>
+                <div class="mb-3" data-param="DoctorId"><label class="form-label">Refer Doctor</label><select class="form-select" data-src="doctors"></select></div>
+                <div class="mb-3" data-param="UserId"><label class="form-label">User</label><select class="form-select" data-src="users"></select></div>
+                <div class="mb-3" data-param="ParentGroupId"><label class="form-label">Parent Group</label><select class="form-select" data-src="parentGroups" id="fParent"></select></div>
+                <div class="mb-3" data-param="TestGroupId"><label class="form-label">Test Group</label><select class="form-select" id="fGroup"></select></div>
+                <div class="mb-3" data-param="TestItemId"><label class="form-label">Test Item</label><select class="form-select" id="fItem"></select></div>
+                <div class="mb-3" data-param="PaymentModeId"><label class="form-label">Payment Mode</label><select class="form-select" data-src="paymentModes"></select></div>
+            </div>
+
+            <!-- ================= Marketing ================= -->
+            <div class="col-lg-4 mis-col">
+                <div class="sec-title"><span>Marketing Section</span></div>
+                <div class="mb-3" data-param="MediaId"><label class="form-label">Media</label><select class="form-select" data-src="medias"></select></div>
+                <div class="mb-3" data-param="DiscountSetupId"><label class="form-label">Discount Scheme</label><select class="form-select" data-src="discountSetups"></select></div>
+                <div class="mb-3" data-param="OpdPackageId"><label class="form-label">OPD Package</label><select class="form-select" data-src="packages"></select></div>
+            </div>
+        </div>
     </div>
-    <div class="col-lg-8"><div class="card"><div class="card-body" id="form"><div class="empty">Select a report.</div></div></div></div>
+    <div class="card-footer d-flex align-items-center gap-2">
+        <span class="small text-muted"><i class="bi bi-info-circle me-1"></i>Greyed filters are not used by the selected report.</span>
+        <button class="btn btn-outline-secondary ms-auto" id="btnReset"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset</button>
+        <button class="btn btn-primary px-4" id="btnView"><i class="bi bi-eye me-1"></i>View</button>
+    </div>
 </div>
 
 @section Scripts {
 <script>
 App.ready(async () => {
     const $ = id => document.getElementById(id);
-    let reports;
-    try { reports = await fetchReports(); } catch (e) { $('list').innerHTML = `<div class="empty text-danger">${App.esc(e.message)}</div>`; return; }
+    const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const KNOWN = new Set([...document.querySelectorAll('[data-param]')].map(b => b.dataset.param));
+    const key = p => p.paramName.replace(/^\x40/, ''); // strip the leading at-sign of the SP parameter name
+    let reports = [], filters = {}, current = null;
 
-    async function fetchReports() {
+    // ---------------------------------------------------------- load data
+    try {
         const res = await fetch(APP.reportBase + '/api/reports', { headers: { Authorization: 'Bearer ' + App.token() } });
         if (!res.ok) throw new Error('Report server: ' + res.status);
-        return (await res.json()).filter(r => r.template === 'Tabular');
+        reports = (await res.json()).filter(r => r.template === 'Tabular');
+        filters = await App.api('/api/mis/filters');
+    } catch (e) { App.toast(e.message, 'danger'); }
+
+    $('report').innerHTML = App.options(reports.map(r => ({ id: r.code, name: r.name })), '', reports.length ? '-- Select report --' : 'No report assigned to your role');
+    document.querySelectorAll('select[data-src]').forEach(s => s.innerHTML = App.options(filters[s.dataset.src] || [], '', 'All'));
+    $('month').innerHTML = MONTHS.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
+
+    // Parent group → test group → test item cascade
+    function fillGroups() {
+        const pg = Number($('fParent').value) || null;
+        $('fGroup').innerHTML = App.options((filters.testGroups || []).filter(g => !pg || g.parentGroupId === pg), '', 'All');
+        fillItems();
     }
-
-    $('list').innerHTML = reports.length ? reports.map((r, i) => `<button class="list-group-item list-group-item-action" data-i="${i}">
-        <i class="bi bi-file-earmark-bar-graph me-2 text-primary"></i>${App.esc(r.name)}</button>`).join('')
-        : '<div class="empty">No report is assigned to your role.</div>';
-
-    async function input(p) {
-        const id = 'p_' + p.paramName.replace('@@', '');
-        const def = p.defaultValue === 'today' ? App.isoDate() : (p.defaultValue || '');
-        switch (p.dataType) {
-            case 'date': return `<input type="date" class="form-control" id="${id}" value="${def}">`;
-            case 'int': case 'decimal': return `<input type="number" class="form-control" id="${id}" value="${App.esc(def)}">`;
-            case 'bool': return `<select class="form-select" id="${id}"><option value="">--</option><option value="true">Yes</option><option value="false">No</option></select>`;
-            case 'testgroup': return `<select class="form-select" id="${id}">${App.options((await App.lookup('/api/diag/lookups/billing')).testGroups, def, 'All')}</select>`;
-            case 'media': return `<select class="form-select" id="${id}">${App.options((await App.lookup('/api/diag/lookups/billing')).medias, def, 'All media')}</select>`;
-            default: return `<input class="form-control" id="${id}" value="${App.esc(def)}">`;
-        }
+    function fillItems() {
+        const pg = Number($('fParent').value) || null, tg = Number($('fGroup').value) || null;
+        $('fItem').innerHTML = App.options((filters.testItems || []).filter(t => (!pg || t.parentGroupId === pg) && (!tg || t.testGroupId === tg)), '', 'All');
     }
+    $('fParent').onchange = fillGroups;
+    $('fGroup').onchange = fillItems;
 
-    $('list').addEventListener('click', async e => {
-        const b = e.target.closest('[data-i]'); if (!b) return;
-        $('list').querySelectorAll('.active').forEach(x => x.classList.remove('active'));
-        b.classList.add('active');
-        const r = reports[Number(b.dataset.i)];
-        const fields = await Promise.all(r.parameters.map(async p => `<div class="col-md-6"><label class="form-label ${p.isRequired ? 'required' : ''}">${App.esc(p.label)}</label>${await input(p)}</div>`));
-        $('form').innerHTML = `<h6 class="fw-bold mb-3">${App.esc(r.name)}</h6><div class="row g-3">${fields.join('')}</div>
-            <div class="mt-3 d-flex gap-2"><button class="btn btn-primary" data-run="pdf"><i class="bi bi-file-pdf me-1"></i>View PDF</button>
-            <button class="btn btn-outline-success" data-run="csv"><i class="bi bi-filetype-csv me-1"></i>Export CSV</button></div>`;
-        $('form').querySelectorAll('[data-run]').forEach(btn => btn.onclick = () => {
-            const q = {};
-            for (const p of r.parameters) {
-                const v = $('p_' + p.paramName.replace('@@', '')).value;
-                if (p.isRequired && !v) { App.toast(`${p.label} is required.`, 'warning'); return; }
-                q[p.paramName.replace('@@', '')] = v;
-            }
-            const csv = btn.dataset.run === 'csv';
-            if (csv) q.format = 'csv';
-            App.report(`/api/reports/run/${encodeURIComponent(r.code)}${App.qs(q)}`, csv ? { download: r.code + '.csv' } : {});
+    // ---------------------------------------------------------- defaults
+    function resetValues() {
+        const now = new Date(), first = new Date(now.getFullYear(), now.getMonth(), 1);
+        $('fromDate').value = App.isoDate(first); $('toDate').value = App.isoDate(now);
+        $('year').value = now.getFullYear(); $('month').value = now.getMonth() + 1;
+        document.querySelectorAll('select[data-src]').forEach(s => s.value = '');
+        fillGroups();
+    }
+    // Year / Month set the date range to that month (up to today for the running month).
+    function monthToRange() {
+        const y = Number($('year').value), m = Number($('month').value);
+        if (!y || !m) return;
+        const first = new Date(y, m - 1, 1), last = new Date(y, m, 0), today = new Date();
+        $('fromDate').value = App.isoDate(first);
+        $('toDate').value = App.isoDate(last > today && first <= today ? today : last);
+    }
+    $('year').addEventListener('change', monthToRange);
+    $('month').addEventListener('change', monthToRange);
+
+    // ---------------------------------------------------------- report selection
+    function applyReport() {
+        current = reports.find(r => r.code === $('report').value) || null;
+        const used = new Map((current?.parameters || []).map(p => [key(p), p]));
+        document.querySelectorAll('[data-param]').forEach(box => {
+            const p = used.get(box.dataset.param);
+            box.classList.toggle('mis-off', !p);
+            box.querySelectorAll('input,select').forEach(i => i.disabled = !p);
+            box.querySelector('.form-label').classList.toggle('required', !!p?.isRequired);
         });
-    });
+        // Parameters that have no field on this screen (added by the user in Reports and Sp Mapping)
+        const others = (current?.parameters || []).filter(p => !KNOWN.has(key(p)));
+        $('otherParams').innerHTML = others.map(p => `<div class="mb-3"><label class="form-label ${p.isRequired ? 'required' : ''}">${App.esc(p.label)}</label>
+            <input class="form-control" data-other="${App.esc(key(p))}" type="${p.dataType === 'date' ? 'date' : ['int', 'decimal'].includes(p.dataType) ? 'number' : 'text'}"
+                   value="${App.esc(p.defaultValue === 'today' ? App.isoDate() : (p.defaultValue || ''))}"></div>`).join('');
+        $('reportInfo').textContent = current ? `${current.parameters.length} filter(s) · ${current.orientation || 'Portrait'}` : '';
+        if (current) App.store.set('diag.misReport', current.code);
+    }
+    $('report').onchange = applyReport;
+
+    // ---------------------------------------------------------- view
+    function valueOf(box) {
+        const el = box.querySelector('input,select');
+        return el ? el.value.trim() : '';
+    }
+    $('btnView').onclick = () => {
+        if (!current) { App.toast('Select a report.', 'warning'); $('report').focus(); return; }
+        const q = {};
+        for (const p of current.parameters) {
+            const k = key(p);
+            const box = document.querySelector(`[data-param="${k}"]`);
+            const v = box ? valueOf(box) : (document.querySelector(`[data-other="${k}"]`)?.value.trim() || '');
+            if (p.isRequired && !v) { App.toast(`${p.label} is required.`, 'warning'); return; }
+            if (v) q[k] = v;
+        }
+        if (q.FromDate && q.ToDate && q.FromDate > q.ToDate) { App.toast('From Date cannot be after To Date.', 'warning'); return; }
+        const fmt = document.querySelector('input[name=fmt]:checked').value;
+        if (fmt === 'xlsx') q.format = 'xlsx';
+        App.report(`/api/reports/run/${encodeURIComponent(current.code)}${App.qs(q)}`, fmt === 'xlsx' ? { download: `${current.code}.xlsx` } : {});
+    };
+    $('btnReset').onclick = () => { resetValues(); applyReport(); };
+
+    resetValues();
+    const last = App.store.get('diag.misReport');
+    if (last && reports.some(r => r.code === last)) $('report').value = last;
+    applyReport();
 });
 </script>
 }

@@ -166,7 +166,11 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
     private record ParamSeed(string Name, string Label, string Type, bool Required = true, string? Default = null);
     private record ReportSeed(string Code, string Name, string Proc, string Template, ParamSeed[] Params, string Orientation = "Portrait");
 
+    // Declared before ReportSeeds: static fields are initialised in source order.
     private static readonly ParamSeed[] DateRange = [new("@FromDate", "From Date", "date", true, "today"), new("@ToDate", "To Date", "date", true, "today")];
+    private static readonly ParamSeed Tenant = new("@TenantId", "Tenant", "tenant", false);
+    private static readonly ParamSeed Doctor = new("@DoctorId", "Refer Doctor", "doctor", false);
+    private static readonly ParamSeed Media = new("@MediaId", "Media", "media", false);
 
     private static readonly ReportSeed[] ReportSeeds =
     [
@@ -176,16 +180,24 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
             [new("@InvestigationId", "Invoice Id", "int"), new("@PaymentId", "Payment Id", "int", false)]),
         new("PATHOLOGY_STICKER", "Pathology Sticker", "diag.usp_Rpt_PathologySticker", "Sticker",
             [new("@InvestigationId", "Invoice Id", "int", false), new("@SampleId", "Sample Id", "int", false)]),
-        new("DAILY_COLLECTION", "Daily Collection Report", "diag.usp_Rpt_DailyCollection", "Tabular", DateRange, "Landscape"),
+        new("DAILY_COLLECTION", "Daily Collection Report", "diag.usp_Rpt_DailyCollection", "Tabular",
+            [..DateRange, Tenant, new("@UserId", "User", "user", false), new("@PaymentModeId", "Payment Mode", "paymentmode", false)], "Landscape"),
         new("TEST_WISE_INCOME", "Test Wise Income", "diag.usp_Rpt_TestWiseIncome", "Tabular",
-            [..DateRange, new("@TestGroupId", "Test Group", "testgroup", false)]),
-        new("DUE_LIST", "Due List", "diag.usp_Rpt_DueList", "Tabular", DateRange),
-        new("CANCEL_REFUND", "Cancel & Refund Report", "diag.usp_Rpt_CancelRefund", "Tabular", DateRange, "Landscape"),
-        new("DOCTOR_WISE_REFERRAL", "Doctor Wise Referral", "diag.usp_Rpt_DoctorWiseReferral", "Tabular", DateRange),
+            [..DateRange, Tenant, new("@ParentGroupId", "Parent Group", "parentgroup", false), new("@TestGroupId", "Test Group", "testgroup", false),
+             new("@TestItemId", "Test Item", "testitem", false), Doctor, Media]),
+        new("DUE_LIST", "Due List", "diag.usp_Rpt_DueList", "Tabular", [..DateRange, Tenant, Doctor, Media], "Landscape"),
+        new("CANCEL_REFUND", "Cancel & Refund Report", "diag.usp_Rpt_CancelRefund", "Tabular",
+            [..DateRange, Tenant, new("@UserId", "User", "user", false)], "Landscape"),
+        new("DOCTOR_WISE_REFERRAL", "Doctor Wise Referral", "diag.usp_Rpt_DoctorWiseReferral", "Tabular", [..DateRange, Tenant, Doctor]),
         new("MEDIA_COMMISSION_SUMMARY", "Media Commission Summary", "diag.usp_Rpt_MediaCommissionSummary", "Tabular",
-            [..DateRange, new("@MediaId", "Media", "media", false)]),
+            [..DateRange, Media, Tenant]),
         new("MEDIA_COMMISSION_DETAIL", "Media Commission Detail", "diag.usp_Rpt_MediaCommissionDetail", "Tabular",
-            [..DateRange, new("@MediaId", "Media", "media", false)], "Landscape"),
+            [..DateRange, Media, Tenant], "Landscape"),
+        new("USER_WISE_PATIENT_STATEMENT", "Daily User Wise Diagnostic Patient Statement", "diag.usp_Rpt_UserWisePatientStatement", "Tabular",
+            [..DateRange, Tenant, new("@UserId", "User", "user", false), Doctor, Media,
+             new("@DiscountSetupId", "Discount Scheme", "discount", false), new("@OpdPackageId", "OPD Package", "package", false)], "Landscape"),
+        new("MONTHLY_INCOME", "Monthly Income (Day Wise)", "diag.usp_Rpt_MonthlyIncome", "Tabular",
+            [new("@Year", "Year", "year", true, "thisyear"), new("@Month", "Month", "month", true, "thismonth"), Tenant]),
     ];
 
     private async Task SeedReportsAsync()
@@ -194,10 +206,23 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
         var codes = await db.Reports.IgnoreQueryFilters().Select(r => r.Code).ToListAsync();
         var sort = 10;
         var accounts = await db.Roles.FirstOrDefaultAsync(x => x.Code == "ACCOUNTS"); // null on a brand-new database
+        var existingReports = await db.Reports.Include(x => x.Parameters).Where(x => codes.Contains(x.Code)).ToListAsync();
         foreach (var r in ReportSeeds)
         {
             sort += 10;
-            if (codes.Contains(r.Code)) continue;
+            var current = existingReports.FirstOrDefault(x => x.Code == r.Code);
+            if (current != null)
+            {
+                // Filters added to a seeded report later: append the missing ones (edits made in the UI are kept).
+                var next = current.Parameters.Count == 0 ? 1 : current.Parameters.Max(p => p.SortOrder) + 1;
+                foreach (var p in r.Params.Where(p => current.Parameters.All(x => !x.ParamName.Equals(p.Name, StringComparison.OrdinalIgnoreCase))))
+                    current.Parameters.Add(new ReportSpParameter
+                    {
+                        ParamName = p.Name, Label = p.Label, DataType = p.Type, IsRequired = p.Required, DefaultValue = p.Default, SortOrder = next++,
+                    });
+                continue;
+            }
+            if (codes.Contains(r.Code)) continue; // soft-deleted by the user
             var report = new Report
             {
                 Code = r.Code, Name = r.Name, ProcedureName = r.Proc, Template = r.Template, Orientation = r.Orientation,

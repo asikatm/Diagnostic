@@ -99,6 +99,35 @@ public class ReportRepository(IConfiguration config)
             commandType: CommandType.StoredProcedure)).ToList();
     }
 
+    // Lookup parameter type → table/column holding its display name (fixed list, never built from user input).
+    private static readonly Dictionary<string, string> LookupNameSql = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["tenant"] = "SELECT Name FROM admin.Tenants WHERE Id = @id",
+        ["user"] = "SELECT FullName FROM admin.Users WHERE Id = @id",
+        ["paymentmode"] = "SELECT Name FROM admin.PaymentModes WHERE Id = @id",
+        ["doctor"] = "SELECT Name FROM diag.Doctors WHERE Id = @id",
+        ["media"] = "SELECT Name FROM diag.Medias WHERE Id = @id",
+        ["parentgroup"] = "SELECT Name FROM diag.ParentGroups WHERE Id = @id",
+        ["testgroup"] = "SELECT Name FROM diag.TestGroups WHERE Id = @id",
+        ["testitem"] = "SELECT Name FROM diag.TestItems WHERE Id = @id",
+        ["discount"] = "SELECT Name FROM diag.DiscountSetups WHERE Id = @id",
+        ["package"] = "SELECT Name FROM diag.OpdPackages WHERE Id = @id",
+    };
+
+    /// <summary>Text shown in the report's filter line: names instead of ids, month names, formatted dates.</summary>
+    private async Task<string> DisplayAsync(ReportParam p, object value)
+    {
+        if (value is DateTime d) return d.ToString("dd-MMM-yyyy");
+        if (p.DataType.Equals("month", StringComparison.OrdinalIgnoreCase) && value is int m)
+            return CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(m);
+        if (value is int id && LookupNameSql.TryGetValue(p.DataType, out var sql))
+        {
+            await using var cn = Open();
+            return await cn.ExecuteScalarAsync<string?>(sql, new { id }) ?? $"#{id}";
+        }
+        return value.ToString() ?? "";
+    }
+
     /// <summary>Runs a tabular report: query-string values are converted with the parameter definitions.</summary>
     public async Task<TabularData> TabularAsync(ReportDefinition def, IQueryCollection query)
     {
@@ -116,7 +145,7 @@ public class ReportRepository(IConfiguration config)
             }
             var value = Convert(p, raw);
             args.Add(name, value);
-            subtitle.Add($"{p.Label}: {(value is DateTime d ? d.ToString("dd-MMM-yyyy") : value)}");
+            subtitle.Add($"{p.Label}: {await DisplayAsync(p, value)}");
         }
 
         await using var cn = Open();
@@ -136,13 +165,17 @@ public class ReportRepository(IConfiguration config)
     {
         try
         {
+            // Lookup types (tenant, user, doctor, media, testgroup …) carry the selected row's Id.
             return p.DataType.ToLowerInvariant() switch
             {
-                "int" or "testgroup" or "media" => int.Parse(raw, CultureInfo.InvariantCulture),
+                "string" => raw,
                 "decimal" => decimal.Parse(raw, CultureInfo.InvariantCulture),
                 "bool" => raw is "1" or "true" or "True",
                 "date" => raw.Equals("today", StringComparison.OrdinalIgnoreCase) ? DateTime.Today : DateTime.Parse(raw, CultureInfo.InvariantCulture),
-                _ => raw,
+                "year" => raw.Equals("thisyear", StringComparison.OrdinalIgnoreCase) ? DateTime.Today.Year : int.Parse(raw, CultureInfo.InvariantCulture),
+                "month" => raw.Equals("thismonth", StringComparison.OrdinalIgnoreCase) ? DateTime.Today.Month
+                    : int.Parse(raw, CultureInfo.InvariantCulture) is var m and >= 1 and <= 12 ? m : throw new FormatException(),
+                _ => int.Parse(raw, CultureInfo.InvariantCulture),
             };
         }
         catch (FormatException)

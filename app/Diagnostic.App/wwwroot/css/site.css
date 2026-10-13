@@ -123,6 +123,16 @@ body { background: var(--bg); font-size: .875rem; color: #1d2a35; }
 .totals td { padding: .25rem .4rem; }
 .totals .grand td { font-size: 1rem; font-weight: 700; border-top: 1px solid var(--border); }
 
+/* ---------------- MIS report filter panel ---------------- */
+.mis-panel .card-body { padding: 1rem 0; }
+.mis-col { padding: 0 1.25rem; }
+.mis-col + .mis-col { border-left: 1px solid var(--border); }
+@media (max-width: 991px) { .mis-col + .mis-col { border-left: 0; border-top: 1px solid var(--border); padding-top: 1rem; } }
+.sec-title { display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; font-weight: 700; font-size: .95rem; color: #1d2a35; }
+.sec-title::before, .sec-title::after { content: ""; flex: 1; height: 1px; background: #9aa8b4; }
+.mis-off { opacity: .45; }
+.mis-off .form-label::after { content: "  (not used)"; font-weight: 400; color: #8a98a5; }
+
 /* ---------------- Login ---------------- */
 .login-wrap { min-height: 100vh; display: grid; place-items: center; background: linear-gradient(135deg, var(--side-top), var(--side-bottom)); padding: 1rem; }
 .login-card { width: 100%; max-width: 380px; background: #fff; border-radius: 14px; padding: 2rem; box-shadow: 0 20px 50px rgba(0,0,0,.3); }

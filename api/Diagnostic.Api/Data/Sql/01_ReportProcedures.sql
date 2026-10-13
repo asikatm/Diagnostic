@@ -150,10 +150,15 @@ END
 GO
 
 -- ---------------- Tabular (MIS) reports: one result set, rendered as a grid by the report server ----------------
+-- Every filter after the dates is optional (NULL = all). The MIS screen sends only the filters mapped in
+-- "Reports and Sp Mapping", so a filter added here must also be added to the report's parameters there.
 
 CREATE OR ALTER PROCEDURE diag.usp_Rpt_DailyCollection
-    @FromDate DATE,
-    @ToDate   DATE
+    @FromDate      DATE,
+    @ToDate        DATE,
+    @TenantId      INT = NULL,
+    @UserId        INT = NULL,
+    @PaymentModeId INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -168,51 +173,75 @@ BEGIN
     LEFT JOIN admin.PaymentChannels pc ON pc.Id = py.PaymentChannelId
     LEFT JOIN admin.Users u ON u.Id = py.CreatedBy
     WHERE py.IsDeleted = 0 AND py.PaymentDate >= @FromDate AND py.PaymentDate < DATEADD(DAY, 1, @ToDate)
+      AND (@TenantId IS NULL OR i.TenantId = @TenantId)
+      AND (@UserId IS NULL OR py.CreatedBy = @UserId)
+      AND (@PaymentModeId IS NULL OR py.PaymentModeId = @PaymentModeId)
     ORDER BY py.PaymentDate;
 END
 GO
 
 CREATE OR ALTER PROCEDURE diag.usp_Rpt_TestWiseIncome
-    @FromDate    DATE,
-    @ToDate      DATE,
-    @TestGroupId INT = NULL
+    @FromDate      DATE,
+    @ToDate        DATE,
+    @TenantId      INT = NULL,
+    @ParentGroupId INT = NULL,
+    @TestGroupId   INT = NULL,
+    @TestItemId    INT = NULL,
+    @DoctorId      INT = NULL,
+    @MediaId       INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT tg.Name AS [Test Group], ti.Name AS [Test], COUNT(*) AS [Qty],
+    SELECT pg.Name AS [Parent Group], tg.Name AS [Test Group], ti.Name AS [Test], COUNT(*) AS [Qty],
            SUM(dt.UnitPrice) AS [Gross], SUM(dt.DiscountAmount) AS [Discount], SUM(dt.VatAmount) AS [VAT], SUM(dt.NetAmount) AS [Net]
     FROM diag.InvestigationDetails dt
     JOIN diag.Investigations i ON i.Id = dt.InvestigationId
     JOIN diag.TestItems ti ON ti.Id = dt.TestItemId
     JOIN diag.TestGroups tg ON tg.Id = ti.TestGroupId
+    JOIN diag.ParentGroups pg ON pg.Id = tg.ParentGroupId
     WHERE dt.IsDeleted = 0 AND dt.Status <> 'Cancelled'
       AND i.InvoiceDate >= @FromDate AND i.InvoiceDate < DATEADD(DAY, 1, @ToDate)
+      AND (@TenantId IS NULL OR i.TenantId = @TenantId)
+      AND (@ParentGroupId IS NULL OR pg.Id = @ParentGroupId)
       AND (@TestGroupId IS NULL OR tg.Id = @TestGroupId)
-    GROUP BY tg.Name, tg.SortOrder, ti.Name
-    ORDER BY tg.SortOrder, tg.Name, ti.Name;
+      AND (@TestItemId IS NULL OR ti.Id = @TestItemId)
+      AND (@DoctorId IS NULL OR i.ReferDoctorId = @DoctorId)
+      AND (@MediaId IS NULL OR i.MediaId = @MediaId)
+    GROUP BY pg.Name, pg.SortOrder, tg.Name, tg.SortOrder, ti.Name
+    ORDER BY pg.SortOrder, tg.SortOrder, tg.Name, ti.Name;
 END
 GO
 
 CREATE OR ALTER PROCEDURE diag.usp_Rpt_DueList
     @FromDate DATE,
-    @ToDate   DATE
+    @ToDate   DATE,
+    @TenantId INT = NULL,
+    @DoctorId INT = NULL,
+    @MediaId  INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
     SELECT i.InvoiceNo AS [Invoice No], CONVERT(VARCHAR(10), i.InvoiceDate, 103) AS [Date], p.PatientCode AS [Patient ID],
-           p.Name AS [Patient], ISNULL(p.Phone, '') AS [Phone], i.NetAmount AS [Net], i.PaidAmount AS [Paid],
-           i.RefundAmount AS [Refund], i.DueAmount AS [Due]
+           p.Name AS [Patient], ISNULL(p.Phone, '') AS [Phone], ISNULL(d.Name, 'Self') AS [Ref. Doctor], ISNULL(m.Name, '') AS [Media],
+           i.NetAmount AS [Net], i.PaidAmount AS [Paid], i.RefundAmount AS [Refund], i.DueAmount AS [Due]
     FROM diag.Investigations i
     JOIN diag.Patients p ON p.Id = i.PatientId
+    LEFT JOIN diag.Doctors d ON d.Id = i.ReferDoctorId
+    LEFT JOIN diag.Medias m ON m.Id = i.MediaId
     WHERE i.IsDeleted = 0 AND i.DueAmount > 0
       AND i.InvoiceDate >= @FromDate AND i.InvoiceDate < DATEADD(DAY, 1, @ToDate)
+      AND (@TenantId IS NULL OR i.TenantId = @TenantId)
+      AND (@DoctorId IS NULL OR i.ReferDoctorId = @DoctorId)
+      AND (@MediaId IS NULL OR i.MediaId = @MediaId)
     ORDER BY i.InvoiceDate;
 END
 GO
 
 CREATE OR ALTER PROCEDURE diag.usp_Rpt_CancelRefund
     @FromDate DATE,
-    @ToDate   DATE
+    @ToDate   DATE,
+    @TenantId INT = NULL,
+    @UserId   INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -227,13 +256,17 @@ BEGIN
     LEFT JOIN admin.Users ru ON ru.Id = cr.CreatedBy
     LEFT JOIN admin.Users au ON au.Id = cr.ApprovedBy
     WHERE cr.IsDeleted = 0 AND cr.CreatedAt >= @FromDate AND cr.CreatedAt < DATEADD(DAY, 1, @ToDate)
+      AND (@TenantId IS NULL OR i.TenantId = @TenantId)
+      AND (@UserId IS NULL OR cr.CreatedBy = @UserId)
     ORDER BY cr.CreatedAt;
 END
 GO
 
 CREATE OR ALTER PROCEDURE diag.usp_Rpt_DoctorWiseReferral
     @FromDate DATE,
-    @ToDate   DATE
+    @ToDate   DATE,
+    @TenantId INT = NULL,
+    @DoctorId INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -244,8 +277,79 @@ BEGIN
     LEFT JOIN diag.Doctors d ON d.Id = i.ReferDoctorId
     WHERE i.IsDeleted = 0 AND i.Status <> 'Cancelled'
       AND i.InvoiceDate >= @FromDate AND i.InvoiceDate < DATEADD(DAY, 1, @ToDate)
+      AND (@TenantId IS NULL OR i.TenantId = @TenantId)
+      AND (@DoctorId IS NULL OR i.ReferDoctorId = @DoctorId)
     GROUP BY d.Name
     ORDER BY SUM(i.NetAmount) DESC;
+END
+GO
+
+-- Invoice-wise statement: who billed which patient, with doctor, media, discount scheme and package.
+CREATE OR ALTER PROCEDURE diag.usp_Rpt_UserWisePatientStatement
+    @FromDate        DATE,
+    @ToDate          DATE,
+    @TenantId        INT = NULL,
+    @UserId          INT = NULL,
+    @DoctorId        INT = NULL,
+    @MediaId         INT = NULL,
+    @DiscountSetupId INT = NULL,
+    @OpdPackageId    INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ISNULL(u.FullName, '') AS [User], CONVERT(VARCHAR(16), i.InvoiceDate, 120) AS [Date], i.InvoiceNo AS [Invoice No],
+           p.Name AS [Patient], ISNULL(i.PatientAge, '') AS [Age], p.Gender AS [Sex], ISNULL(d.Name, 'Self') AS [Ref. Doctor],
+           ISNULL(m.Name, '') AS [Media], i.GrossAmount AS [Gross], i.DiscountAmount AS [Discount], i.NetAmount AS [Net],
+           i.PaidAmount - i.RefundAmount AS [Paid], i.DueAmount AS [Due], i.Status
+    FROM diag.Investigations i
+    JOIN diag.Patients p ON p.Id = i.PatientId
+    LEFT JOIN admin.Users u ON u.Id = i.CreatedBy
+    LEFT JOIN diag.Doctors d ON d.Id = i.ReferDoctorId
+    LEFT JOIN diag.Medias m ON m.Id = i.MediaId
+    WHERE i.IsDeleted = 0 AND i.InvoiceDate >= @FromDate AND i.InvoiceDate < DATEADD(DAY, 1, @ToDate)
+      AND (@TenantId IS NULL OR i.TenantId = @TenantId)
+      AND (@UserId IS NULL OR i.CreatedBy = @UserId)
+      AND (@DoctorId IS NULL OR i.ReferDoctorId = @DoctorId)
+      AND (@MediaId IS NULL OR i.MediaId = @MediaId)
+      AND (@DiscountSetupId IS NULL OR i.DiscountSetupId = @DiscountSetupId)
+      AND (@OpdPackageId IS NULL OR i.OpdPackageId = @OpdPackageId)
+    ORDER BY u.FullName, i.InvoiceDate;
+END
+GO
+
+-- Day-wise billing and collection of one month.
+CREATE OR ALTER PROCEDURE diag.usp_Rpt_MonthlyIncome
+    @Year     INT,
+    @Month    INT,
+    @TenantId INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @from DATE = DATEFROMPARTS(@Year, @Month, 1);
+    DECLARE @to DATE = DATEADD(MONTH, 1, @from);
+
+    WITH days AS (
+        SELECT @from AS D UNION ALL SELECT DATEADD(DAY, 1, D) FROM days WHERE DATEADD(DAY, 1, D) < @to
+    ), bill AS (
+        SELECT CAST(InvoiceDate AS DATE) AS D, COUNT(*) AS Invoices, SUM(GrossAmount) AS Gross, SUM(DiscountAmount) AS Discount, SUM(NetAmount) AS Net
+        FROM diag.Investigations
+        WHERE IsDeleted = 0 AND InvoiceDate >= @from AND InvoiceDate < @to AND (@TenantId IS NULL OR TenantId = @TenantId)
+        GROUP BY CAST(InvoiceDate AS DATE)
+    ), coll AS (
+        SELECT CAST(py.PaymentDate AS DATE) AS D,
+               SUM(CASE WHEN py.PaymentType = 'Refund' THEN -py.Amount ELSE py.Amount END) AS Collection
+        FROM diag.InvestigationPayments py JOIN diag.Investigations i ON i.Id = py.InvestigationId
+        WHERE py.IsDeleted = 0 AND py.PaymentDate >= @from AND py.PaymentDate < @to AND (@TenantId IS NULL OR i.TenantId = @TenantId)
+        GROUP BY CAST(py.PaymentDate AS DATE)
+    )
+    SELECT CONVERT(VARCHAR(10), days.D, 103) AS [Date], DATENAME(WEEKDAY, days.D) AS [Day],
+           ISNULL(b.Invoices, 0) AS [Invoices], ISNULL(b.Gross, 0) AS [Gross], ISNULL(b.Discount, 0) AS [Discount],
+           ISNULL(b.Net, 0) AS [Net], ISNULL(c.Collection, 0) AS [Collection]
+    FROM days
+    LEFT JOIN bill b ON b.D = days.D
+    LEFT JOIN coll c ON c.D = days.D
+    ORDER BY days.D
+    OPTION (MAXRECURSION 40);
 END
 GO
 
@@ -254,7 +358,8 @@ GO
 CREATE OR ALTER PROCEDURE diag.usp_Rpt_MediaCommissionSummary
     @FromDate DATE,
     @ToDate   DATE,
-    @MediaId  INT = NULL
+    @MediaId  INT = NULL,
+    @TenantId INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -266,6 +371,7 @@ BEGIN
     JOIN diag.InvestigationDetails dt ON dt.InvestigationId = i.Id AND dt.IsDeleted = 0 AND dt.Status <> 'Cancelled'
     WHERE i.IsDeleted = 0 AND i.InvoiceDate >= @FromDate AND i.InvoiceDate < DATEADD(DAY, 1, @ToDate)
       AND (@MediaId IS NULL OR i.MediaId = @MediaId)
+      AND (@TenantId IS NULL OR i.TenantId = @TenantId)
     GROUP BY m.Code, m.Name, m.Phone
     ORDER BY SUM(dt.MediaCommission) DESC;
 END
@@ -274,7 +380,8 @@ GO
 CREATE OR ALTER PROCEDURE diag.usp_Rpt_MediaCommissionDetail
     @FromDate DATE,
     @ToDate   DATE,
-    @MediaId  INT = NULL
+    @MediaId  INT = NULL,
+    @TenantId INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -289,6 +396,7 @@ BEGIN
     JOIN diag.TestGroups tg ON tg.Id = ti.TestGroupId
     WHERE i.IsDeleted = 0 AND i.InvoiceDate >= @FromDate AND i.InvoiceDate < DATEADD(DAY, 1, @ToDate)
       AND (@MediaId IS NULL OR i.MediaId = @MediaId)
+      AND (@TenantId IS NULL OR i.TenantId = @TenantId)
     ORDER BY m.Name, i.InvoiceDate, dt.Id;
 END
 GO

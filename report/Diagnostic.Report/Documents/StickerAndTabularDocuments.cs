@@ -65,12 +65,20 @@ public class TabularDocument(TabularData data, LetterHeadRow? letterHead, bool l
                 c.Item().PaddingBottom(4);
             });
 
+            // Column width follows its content: longest of header / values (numbers include the total), within limits.
+            var widths = data.Columns.Select((c, i) =>
+            {
+                var longest = data.Rows.Select(r => Format(r[i]).Length).DefaultIfEmpty(0).Max();
+                if (numeric[i]) longest = Math.Max(longest, Format(data.Rows.Sum(r => r[i] is null ? 0m : Convert.ToDecimal(r[i]))).Length);
+                return (float)Math.Clamp(Math.Max(longest, c.Length * 0.9), 4, 30);
+            }).ToArray();
+
             page.Content().Table(t =>
             {
                 t.ColumnsDefinition(cd =>
                 {
                     cd.ConstantColumn(24);
-                    foreach (var isNum in numeric) cd.RelativeColumn(isNum ? 1 : 1.6f);
+                    foreach (var w in widths) cd.RelativeColumn(w);
                 });
                 t.Header(h =>
                 {
