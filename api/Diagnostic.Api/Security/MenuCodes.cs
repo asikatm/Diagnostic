@@ -38,6 +38,9 @@ public static class MenuCodes
     public const string ParentGroup = "DIAG_PARENT_GROUP";
     public const string TestGroup = "DIAG_TEST_GROUP";
     public const string TestItem = "DIAG_TEST_ITEM";
+    public const string TestSubGroup = "DIAG_TEST_SUB_GROUP";
+    public const string TestMethod = "DIAG_TEST_METHOD";
+    public const string TestConsumable = "DIAG_TEST_CONSUMABLE";
     public const string ReportParameter = "DIAG_REPORT_PARAMETER";
     public const string Discount = "DIAG_DISCOUNT";
     public const string Media = "DIAG_MEDIA";

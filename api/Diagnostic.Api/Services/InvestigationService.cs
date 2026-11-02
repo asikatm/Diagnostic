@@ -10,6 +10,7 @@ namespace Diagnostic.Api.Services;
 
 public class PatientInput
 {
+    public string? Title { get; set; }
     public string Name { get; set; } = string.Empty;
     public Gender Gender { get; set; }
     public DateOnly? DateOfBirth { get; set; }
@@ -23,8 +24,13 @@ public class PatientInput
 public class InvestigationLineInput
 {
     public int TestItemId { get; set; }
-    /// <summary>Manual line discount (flat amount).</summary>
+    public int Quantity { get; set; } = 1;
+    /// <summary>Manual line discount as a flat amount …</summary>
     public decimal DiscountAmount { get; set; }
+    /// <summary>… or as a percent of the line amount (wins when &gt; 0).</summary>
+    public decimal DiscountPercent { get; set; }
+    public bool IsUrgent { get; set; }
+    public string? Note { get; set; }
 }
 
 public class PaymentInput
@@ -50,6 +56,9 @@ public class CreateInvestigationDto
     /// <summary>Invoice-level flat discount, spread over discountable tests.</summary>
     public decimal ExtraDiscount { get; set; }
     public PaymentInput? Payment { get; set; }
+    /// <summary>Split payment (cash, card, mobile …) – added to <see cref="Payment"/>.</summary>
+    public List<PaymentInput> Payments { get; set; } = [];
+    /// <summary>Required when any discount is applied.</summary>
     public string? Remarks { get; set; }
 }
 
@@ -59,7 +68,8 @@ public record InvoiceListItem(int Id, string InvoiceNo, DateTime InvoiceDate, st
     string? ReferDoctor, decimal NetAmount, decimal PaidAmount, decimal RefundAmount, decimal DueAmount, InvestigationStatus Status, int TestCount);
 
 public record InvoiceDetailDto(int Id, int TestItemId, string TestCode, string TestName, string GroupName, decimal UnitPrice,
-    decimal DiscountAmount, decimal VatAmount, decimal NetAmount, TestStatus Status, DateTime? DeliveryDateTime, string? SampleNo);
+    decimal DiscountAmount, decimal VatAmount, decimal NetAmount, TestStatus Status, DateTime? DeliveryDateTime, string? SampleNo,
+    int Quantity, bool IsUrgent, string? Note, bool IsConsumable, int? ParentDetailId);
 
 public record InvoicePaymentDto(int Id, string ReceiptNo, DateTime PaymentDate, PaymentType PaymentType, string PaymentMode,
     string? PaymentChannel, decimal Amount, string? TransactionRef);
@@ -101,40 +111,55 @@ public class InvestigationService(DiagnosticDbContext db, NumberSequenceService 
             Remarks = dto.Remarks,
         };
 
+        if (lines.Any(l => l.Discount > 0) && string.IsNullOrWhiteSpace(dto.Remarks))
+            throw new AppException("Remarks is required when any discount is applied.");
+
         var delivery = await DeliveryCalculator.CreateAsync(db, lines.Select(l => l.Item).ToList());
         var commission = dto.MediaId.HasValue ? await MediaCommissionCalculator.CreateAsync(db, dto.MediaId.Value) : null;
+        var detailOf = new Dictionary<Line, InvestigationDetail>();
         foreach (var l in lines)
         {
-            var taxable = l.UnitPrice - l.Discount;
+            var taxable = l.Amount - l.Discount;
             var vat = Math.Round(taxable * l.Item.VatPercent / 100m, 2);
-            inv.Details.Add(new InvestigationDetail
+            var detail = new InvestigationDetail
             {
                 TestItemId = l.Item.Id,
                 UnitPrice = l.UnitPrice,
+                Quantity = l.Quantity,
+                IsUrgent = l.IsUrgent,
+                Note = l.Note,
                 DiscountAmount = l.Discount,
                 VatAmount = vat,
                 NetAmount = taxable + vat,
-                MediaCommission = commission?.For(l.Item, taxable) ?? 0,
-                DeliveryDateTime = delivery.For(l.Item, inv.InvoiceDate),
-            });
+                MediaCommission = l.Parent == null ? commission?.For(l.Item, taxable) ?? 0 : 0,
+                DeliveryDateTime = l.Item.IsConsumable ? null : delivery.For(l.Item, inv.InvoiceDate),
+            };
+            detailOf[l] = detail;
+            inv.Details.Add(detail);
         }
 
         InvoiceTotals.Recalculate(inv);
 
-        InvestigationPayment? payment = null;
-        if (dto.Payment is { Amount: > 0 })
-        {
-            if (dto.Payment.Amount > inv.NetAmount) throw new AppException("Paid amount cannot be more than the net amount.");
-            payment = await NewPaymentAsync(dto.Payment, PaymentType.Payment);
-            inv.Payments.Add(payment);
-            InvoiceTotals.Recalculate(inv);
-        }
+        // Cash + card + mobile banking can be taken together; each becomes its own money receipt.
+        var payments = new List<PaymentInput>(dto.Payments);
+        if (dto.Payment != null) payments.Insert(0, dto.Payment);
+        payments = payments.Where(p => p.Amount > 0).ToList();
+        if (payments.Sum(p => p.Amount) > inv.NetAmount) throw new AppException("Paid amount cannot be more than the net amount.");
+        foreach (var p in payments) inv.Payments.Add(await NewPaymentAsync(p, PaymentType.Payment));
+        InvoiceTotals.Recalculate(inv);
 
         db.Investigations.Add(inv);
         await db.SaveChangesAsync();
+
+        // Link consumable lines to their test line (ids exist only after the first save).
+        foreach (var (line, detail) in detailOf.Where(x => x.Key.Parent != null))
+            detail.ParentDetailId = detailOf[line.Parent!].Id;
+        await db.SaveChangesAsync();
         await tx.CommitAsync();
 
-        return new CreateInvestigationResult(inv.Id, inv.InvoiceNo, payment?.Id, payment?.ReceiptNo, inv.NetAmount, inv.DueAmount);
+        var single = inv.Payments.Count == 1 ? inv.Payments[0] : null; // several receipts → print the whole invoice
+        return new CreateInvestigationResult(inv.Id, inv.InvoiceNo, single?.Id, string.Join(", ", inv.Payments.Select(p => p.ReceiptNo)),
+            inv.NetAmount, inv.DueAmount);
     }
 
     public async Task<InvestigationPayment> CollectDueAsync(int investigationId, PaymentInput input)
@@ -184,7 +209,7 @@ public class InvestigationService(DiagnosticDbContext db, NumberSequenceService 
                 i.GrossAmount, i.DiscountAmount, i.VatAmount, i.NetAmount, i.PaidAmount, i.RefundAmount, i.DueAmount, i.Status, i.Remarks,
                 i.Details.OrderBy(d => d.Id).Select(d => new InvoiceDetailDto(d.Id, d.TestItemId, d.TestItem!.Code ?? "", d.TestItem.Name,
                     d.TestItem.TestGroup!.Name, d.UnitPrice, d.DiscountAmount, d.VatAmount, d.NetAmount, d.Status, d.DeliveryDateTime,
-                    d.SampleCollection!.SampleNo)).ToList(),
+                    d.SampleCollection!.SampleNo, d.Quantity, d.IsUrgent, d.Note, d.TestItem.IsConsumable, d.ParentDetailId)).ToList(),
                 i.Payments.OrderBy(p => p.Id).Select(p => new InvoicePaymentDto(p.Id, p.ReceiptNo, p.PaymentDate, p.PaymentType,
                     p.PaymentMode!.Name, p.PaymentChannel!.Name, p.Amount, p.TransactionRef)).ToList(),
                 i.Media!.Name, i.MediaCommission))
@@ -225,7 +250,7 @@ public class InvestigationService(DiagnosticDbContext db, NumberSequenceService 
         var patient = new Patient
         {
             PatientCode = await numbers.NextAsync(NumberSequenceService.Patient),
-            Name = p.Name.Trim(), Gender = p.Gender, DateOfBirth = p.DateOfBirth, Phone = p.Phone, Address = p.Address,
+            Title = string.IsNullOrWhiteSpace(p.Title) ? null : p.Title.Trim(), Name = p.Name.Trim(), Gender = p.Gender, DateOfBirth = p.DateOfBirth, Phone = p.Phone, Address = p.Address,
             BloodGroup = p.BloodGroup, ReligionId = p.ReligionId, CountryId = p.CountryId,
         };
         db.Patients.Add(patient);
@@ -236,9 +261,16 @@ public class InvestigationService(DiagnosticDbContext db, NumberSequenceService 
     {
         public required TestItem Item { get; init; }
         public decimal UnitPrice { get; init; }
+        public int Quantity { get; init; } = 1;
+        public bool IsUrgent { get; init; }
+        public string? Note { get; init; }
         public decimal Discount { get; set; }
         public bool FromPackage { get; init; }
-        public decimal MaxDiscount => FromPackage || !Item.IsDiscountAllowed ? 0 : Math.Round(UnitPrice * Item.MaxDiscountPercent / 100m, 2);
+        /// <summary>Consumable added for the test line at this index (needle, tourniquet …).</summary>
+        public Line? Parent { get; init; }
+        public decimal Amount => UnitPrice * Quantity;
+        public decimal MaxDiscount => FromPackage || Parent != null || !Item.IsDiscountAllowed
+            ? 0 : Math.Round(Amount * Item.MaxDiscountPercent / 100m, 2);
     }
 
     private async Task<List<Line>> BuildLinesAsync(CreateInvestigationDto dto)
@@ -262,12 +294,22 @@ public class InvestigationService(DiagnosticDbContext db, NumberSequenceService 
         {
             if (!items.TryGetValue(t.TestItemId, out var item)) throw new AppException($"Test #{t.TestItemId} is not available.");
             if (lines.Any(l => l.Item.Id == item.Id)) throw new AppException($"'{item.Name}' is already included in the package.");
-            var line = new Line { Item = item, UnitPrice = item.Price };
-            if (t.DiscountAmount < 0) throw new AppException("Discount cannot be negative.");
-            if (t.DiscountAmount > line.MaxDiscount) throw new AppException($"Maximum discount for '{item.Name}' is {line.MaxDiscount:N2}.");
-            line.Discount = Math.Round(t.DiscountAmount, 2);
+            if (t.Quantity is < 1 or > 100) throw new AppException($"Quantity of '{item.Name}' must be between 1 and 100.");
+            var line = new Line { Item = item, UnitPrice = item.Price, Quantity = t.Quantity, IsUrgent = t.IsUrgent, Note = t.Note?.Trim() };
+            if (t.DiscountAmount < 0 || t.DiscountPercent is < 0 or > 100) throw new AppException("Discount cannot be negative or above 100 %.");
+            var discount = t.DiscountPercent > 0 ? Math.Round(line.Amount * t.DiscountPercent / 100m, 2) : Math.Round(t.DiscountAmount, 2);
+            if (discount > line.MaxDiscount) throw new AppException($"Maximum discount for '{item.Name}' is {line.MaxDiscount:N2}.");
+            line.Discount = discount;
             lines.Add(line);
         }
+
+        // Needle & tourniquet mapping: consumables are billed automatically with their test (package tests included).
+        var testIds = lines.Select(l => l.Item.Id).ToList();
+        var maps = await db.TestItemConsumables.AsNoTracking().Include(m => m.ConsumableItem)
+            .Where(m => m.IsActive && testIds.Contains(m.TestItemId) && m.ConsumableItem!.IsActive).ToListAsync();
+        foreach (var parent in lines.ToList())
+            foreach (var m in maps.Where(m => m.TestItemId == parent.Item.Id))
+                lines.Add(new Line { Item = m.ConsumableItem!, UnitPrice = m.ConsumableItem!.Price, Quantity = m.Quantity, Parent = parent });
         return lines;
     }
 
@@ -283,12 +325,12 @@ public class InvestigationService(DiagnosticDbContext db, NumberSequenceService 
                 throw new AppException($"Discount '{setup.Name}' is only for patients referred by the configured doctor.");
 
             // Test wise (TestItemId) and/or group wise (TestGroupId) scheme; both empty = all tests.
-            var eligible = lines.Where(l => (setup.TestItemId == null || l.Item.Id == setup.TestItemId)
+            var eligible = lines.Where(l => l.Parent == null && (setup.TestItemId == null || l.Item.Id == setup.TestItemId)
                                             && (setup.TestGroupId == null || l.Item.TestGroupId == setup.TestGroupId)).ToList();
             if (eligible.Count == 0) throw new AppException($"Discount '{setup.Name}' does not apply to any selected test.");
             if (setup.DiscountType == DiscountType.Percent)
                 foreach (var l in eligible)
-                    l.Discount = Math.Min(l.MaxDiscount, l.Discount + Math.Round(l.UnitPrice * setup.Value / 100m, 2));
+                    l.Discount = Math.Min(l.MaxDiscount, l.Discount + Math.Round(l.Amount * setup.Value / 100m, 2));
             else
                 Spread(eligible, setup.Value, strict: false);
         }
@@ -306,12 +348,12 @@ public class InvestigationService(DiagnosticDbContext db, NumberSequenceService 
             amount = room;
         }
         var candidates = lines.Where(l => l.MaxDiscount - l.Discount > 0).ToList();
-        var basis = candidates.Sum(l => l.UnitPrice);
+        var basis = candidates.Sum(l => l.Amount);
         var remaining = amount;
         for (var i = 0; i < candidates.Count && remaining > 0; i++)
         {
             var l = candidates[i];
-            var share = i == candidates.Count - 1 ? remaining : Math.Round(amount * l.UnitPrice / basis, 2);
+            var share = i == candidates.Count - 1 ? remaining : Math.Round(amount * l.Amount / basis, 2);
             share = Math.Min(share, Math.Min(remaining, l.MaxDiscount - l.Discount));
             l.Discount += share;
             remaining -= share;
@@ -343,7 +385,7 @@ public static class InvoiceTotals
     public static void Recalculate(Investigation inv)
     {
         var active = inv.Details.Where(d => d.Status != TestStatus.Cancelled && !d.IsDeleted).ToList();
-        inv.GrossAmount = active.Sum(d => d.UnitPrice);
+        inv.GrossAmount = active.Sum(d => d.UnitPrice * d.Quantity);
         inv.DiscountAmount = active.Sum(d => d.DiscountAmount);
         inv.VatAmount = active.Sum(d => d.VatAmount);
         inv.NetAmount = active.Sum(d => d.NetAmount);

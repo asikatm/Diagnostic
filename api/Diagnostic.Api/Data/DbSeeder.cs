@@ -28,6 +28,38 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
             await SeedAdminAsync();
             await SeedDiagnosticAsync();
         }
+        await SeedCatalogExtrasAsync();
+    }
+
+    /// <summary>Test methods and consumable items (needle, tourniquet) – added once, also to existing databases.</summary>
+    private async Task SeedCatalogExtrasAsync()
+    {
+        // Rows created before these columns existed got 0 from the migration.
+        await db.ReportParameters.IgnoreQueryFilters().Where(p => p.FontSize == 0).ExecuteUpdateAsync(s => s.SetProperty(p => p.FontSize, 10));
+        await db.TestItems.IgnoreQueryFilters().Where(t => t.NumberOfSample == 0).ExecuteUpdateAsync(s => s.SetProperty(t => t.NumberOfSample, 1));
+
+        if (!await db.TestMethods.IgnoreQueryFilters().AnyAsync())
+        {
+            string[] methods = ["Photometric", "ELISA", "Chemiluminescence", "Electrochemiluminescence", "Impedance",
+                "Fluorescence Flow Cytometry", "Microscopy", "Immunochromatography", "Agglutination", "Westergren"];
+            db.TestMethods.AddRange(methods.Select((m, i) => new TestMethod { Code = $"TM{i + 1:00}", Name = m, SortOrder = i + 1 }));
+        }
+
+        if (!await db.TestItems.IgnoreQueryFilters().AnyAsync(t => t.IsConsumable))
+        {
+            var parent = await db.ParentGroups.OrderBy(p => p.SortOrder).FirstOrDefaultAsync();
+            if (parent != null)
+            {
+                var group = await db.TestGroups.FirstOrDefaultAsync(g => g.Code == "CONS")
+                            ?? new TestGroup { Code = "CONS", Name = "Consumables", ParentGroup = parent, SortOrder = 99 };
+                db.TestItems.AddRange(
+                    new TestItem { Code = "CON001", Name = "Disposable Needle", ShortName = "Needle", TestGroup = group, Price = 20,
+                        IsConsumable = true, RequiresSample = false, IsDiscountAllowed = false, ResultType = TestResultType.Text },
+                    new TestItem { Code = "CON002", Name = "Tourniquet (Single Use)", ShortName = "Tourniquet", TestGroup = group, Price = 50,
+                        IsConsumable = true, RequiresSample = false, IsDiscountAllowed = false, ResultType = TestResultType.Text });
+            }
+        }
+        await db.SaveChangesAsync();
     }
 
     private async Task RunSqlScriptsAsync()
@@ -69,6 +101,9 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
         new(MenuCodes.ParentGroup, "Parent Group", "/Master/ParentGroup", "bi-diagram-3"),
         new(MenuCodes.TestGroup, "TEST GROUP", "/Master/TestGroup", "bi-collection"),
         new(MenuCodes.TestItem, "Test Item", "/Master/TestItem", "bi-eyedropper"),
+        new(MenuCodes.TestSubGroup, "Test Sub Groups", "/Master/TestSubGroup", "bi-collection-fill", 125, ["PATHOLOGIST"]),
+        new(MenuCodes.TestMethod, "Test Method", "/Master/TestMethod", "bi-gear-wide-connected", 127, ["PATHOLOGIST"]),
+        new(MenuCodes.TestConsumable, "Test Item With Needle & Tourniquet Mapping", "/Master/TestItemConsumable", "bi-bandaid", 135, ["PATHOLOGIST"]),
         new(MenuCodes.ReportParameter, "REPORT PARAMETER", "/Master/ReportParameter", "bi-sliders"),
         new(MenuCodes.Discount, "Discount", "/Master/DiscountSetup", "bi-percent"),
         new(MenuCodes.Media, "Media", "/Master/Media", "bi-person-vcard", 152, ["ACCOUNTS"]),

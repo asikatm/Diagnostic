@@ -38,7 +38,8 @@ public class DoctorsController(DiagnosticDbContext db) : CrudController<Doctor>(
 public class TestItemsController(DiagnosticDbContext db) : CrudController<TestItem>(db)
 {
     protected override IQueryable<TestItem> Query() =>
-        base.Query().Include(x => x.TestGroup).ThenInclude(g => g!.ParentGroup).Include(x => x.Specimen);
+        base.Query().Include(x => x.TestGroup).ThenInclude(g => g!.ParentGroup).Include(x => x.Specimen)
+            .Include(x => x.TestSubGroup).Include(x => x.DefaultVacutainer);
 
     protected override IQueryable<TestItem> ApplySearch(IQueryable<TestItem> q, string search) =>
         q.Where(x => x.Name.Contains(search) || x.Code!.Contains(search) || x.ShortName!.Contains(search));
@@ -54,10 +55,49 @@ public class TestItemsController(DiagnosticDbContext db) : CrudController<TestIt
     [HttpGet("search"), MenuCode(MenuCodes.Investigation), PermissionAction(PermissionAction.View)]
     public async Task<IActionResult> BillingSearch([FromQuery] string? q, [FromQuery] int take = 30) =>
         Ok(await Db.TestItems.AsNoTracking()
-            .Where(x => x.IsActive && (q == null || x.Name.Contains(q) || x.Code!.Contains(q) || x.ShortName!.Contains(q)))
+            .Where(x => x.IsActive && !x.IsConsumable && (q == null || x.Name.Contains(q) || x.Code!.Contains(q) || x.ShortName!.Contains(q)))
             .OrderBy(x => x.Name).Take(take)
-            .Select(x => new { x.Id, x.Code, x.Name, x.Price, x.VatPercent, x.IsDiscountAllowed, x.MaxDiscountPercent, x.TestGroupId, Group = x.TestGroup!.Name })
+            .Select(x => new
+            {
+                x.Id, x.Code, x.Name, x.Price, x.VatPercent, x.IsDiscountAllowed, x.MaxDiscountPercent, x.TestGroupId, Group = x.TestGroup!.Name,
+                x.IsFasting,
+                // Consumables billed automatically with this test (Needle & Tourniquet mapping) – shown as a preview.
+                Consumables = Db.TestItemConsumables.Where(c => c.TestItemId == x.Id && c.IsActive && c.ConsumableItem!.IsActive)
+                    .Select(c => new { c.ConsumableItemId, c.ConsumableItem!.Name, c.ConsumableItem.Price, c.Quantity, c.ConsumableItem.VatPercent }).ToList(),
+            })
             .ToListAsync());
+}
+
+[Route("api/diag/test-sub-groups"), MenuCode(MenuCodes.TestSubGroup)]
+public class TestSubGroupsController(DiagnosticDbContext db) : CrudController<TestSubGroup>(db)
+{
+    protected override IQueryable<TestSubGroup> Query() => base.Query().Include(x => x.TestGroup);
+}
+
+[Route("api/diag/test-methods"), MenuCode(MenuCodes.TestMethod)]
+public class TestMethodsController(DiagnosticDbContext db) : CrudController<TestMethod>(db);
+
+/// <summary>Needle &amp; tourniquet mapping: consumables billed automatically with a test.</summary>
+[Route("api/diag/test-consumables"), MenuCode(MenuCodes.TestConsumable)]
+public class TestItemConsumablesController(DiagnosticDbContext db) : CrudController<TestItemConsumable>(db)
+{
+    protected override IQueryable<TestItemConsumable> Query() => base.Query().Include(x => x.TestItem).Include(x => x.ConsumableItem);
+
+    protected override IQueryable<TestItemConsumable> ApplySearch(IQueryable<TestItemConsumable> q, string search) =>
+        q.Where(x => x.TestItem!.Name.Contains(search) || x.ConsumableItem!.Name.Contains(search));
+
+    protected override IQueryable<TestItemConsumable> ApplyOrder(IQueryable<TestItemConsumable> q) =>
+        q.OrderBy(x => x.TestItem!.Name).ThenBy(x => x.ConsumableItem!.Name);
+
+    protected override async Task ValidateAsync(TestItemConsumable model, TestItemConsumable? existing)
+    {
+        if (model.Quantity is < 1 or > 100) throw new AppException("Quantity must be between 1 and 100.");
+        if (model.TestItemId == model.ConsumableItemId) throw new AppException("A test cannot be its own consumable.");
+        if (!await Db.TestItems.AnyAsync(t => t.Id == model.ConsumableItemId && t.IsConsumable))
+            throw new AppException("Select an item marked as 'Consumable' in Test Item (needle, tourniquet, tube …).");
+        if (await Db.TestItemConsumables.AnyAsync(x => x.Id != model.Id && x.TestItemId == model.TestItemId && x.ConsumableItemId == model.ConsumableItemId))
+            throw new AppException("This consumable is already mapped to the test.");
+    }
 }
 
 [Route("api/diag/report-parameters"), MenuCode(MenuCodes.ReportParameter)]
@@ -246,6 +286,6 @@ public class PatientsController(DiagnosticDbContext db, Services.NumberSequenceS
         Ok(await Db.Patients.AsNoTracking()
             .Where(x => x.PatientCode == q || x.Phone!.Contains(q) || x.Name.Contains(q))
             .OrderByDescending(x => x.Id).Take(20)
-            .Select(x => new { x.Id, x.PatientCode, x.Name, x.Gender, x.DateOfBirth, x.Phone, x.Address, x.BloodGroup })
+            .Select(x => new { x.Id, x.PatientCode, x.Title, x.Name, x.Gender, x.DateOfBirth, x.Phone, x.Address, x.BloodGroup })
             .ToListAsync());
 }

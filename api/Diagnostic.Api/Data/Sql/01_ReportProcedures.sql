@@ -106,16 +106,20 @@ BEGIN
     ORDER BY pg.SortOrder, tg.SortOrder, dt.Id;
 
     SELECT lr.InvestigationDetailId AS DetailId, rp.Name AS ParameterName, rp.GroupHeading, res.ResultValue, rp.Unit,
-           CASE WHEN p.Gender = 'Male' AND ISNULL(rp.NormalRangeMale, '') <> '' THEN rp.NormalRangeMale
+           rp.IsGroupTitle, rp.IsBold, rp.IsItalic,
+           CASE WHEN p.DateOfBirth IS NOT NULL AND DATEADD(YEAR, 12, p.DateOfBirth) > CAST(GETDATE() AS DATE)
+                     AND ISNULL(rp.NormalRangeChild, '') <> '' THEN rp.NormalRangeChild
+                WHEN p.Gender = 'Male' AND ISNULL(rp.NormalRangeMale, '') <> '' THEN rp.NormalRangeMale
                 WHEN p.Gender = 'Female' AND ISNULL(rp.NormalRangeFemale, '') <> '' THEN rp.NormalRangeFemale
                 ELSE rp.NormalRange END AS NormalRange,
-           res.Flag, rp.Method, res.Remarks, rp.SortOrder
+           res.Flag, ISNULL(tm.Name, rp.Method) AS Method, res.Remarks, rp.SortOrder
     FROM diag.LabResults res
     JOIN diag.LabReports lr ON lr.Id = res.LabReportId AND lr.IsDeleted = 0
     JOIN diag.InvestigationDetails dt ON dt.Id = lr.InvestigationDetailId
     JOIN diag.Investigations i ON i.Id = dt.InvestigationId
     JOIN diag.Patients p ON p.Id = i.PatientId
     JOIN diag.ReportParameters rp ON rp.Id = res.ReportParameterId
+    LEFT JOIN diag.TestMethods tm ON tm.Id = rp.TestMethodId
     WHERE dt.InvestigationId = @InvestigationId AND res.IsDeleted = 0
       AND (dt.Status IN ('Finalized', 'Delivered') OR (@Preview = 1 AND dt.Status = 'Verified'))
       AND (NOT EXISTS (SELECT 1 FROM @ids) OR dt.Id IN (SELECT Id FROM @ids))

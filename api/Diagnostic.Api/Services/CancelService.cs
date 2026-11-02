@@ -110,6 +110,9 @@ public class CancelService(DiagnosticDbContext db, InvestigationService investig
                 : inv.Details.ToList();
             if (targets.Any(d => d.Status is TestStatus.Verified or TestStatus.Finalized or TestStatus.Delivered))
                 throw new AppException("Report has been verified after the request was made; it cannot be cancelled now.");
+            // Consumables (needle, tourniquet …) billed with a cancelled test are cancelled with it.
+            var ids = targets.Select(t => t.Id).ToHashSet();
+            targets.AddRange(inv.Details.Where(d => d.ParentDetailId.HasValue && ids.Contains(d.ParentDetailId.Value) && !ids.Contains(d.Id)));
             foreach (var d in targets) d.Status = TestStatus.Cancelled;
 
             InvoiceTotals.Recalculate(inv);

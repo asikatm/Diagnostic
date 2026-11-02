@@ -2063,3 +2063,344 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[TestItems] ADD [DefaultVacutainerId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[TestItems] ADD [IsConsumable] bit NOT NULL DEFAULT CAST(0 AS bit);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[TestItems] ADD [IsFasting] bit NOT NULL DEFAULT CAST(0 AS bit);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[TestItems] ADD [NumberOfSample] int NOT NULL DEFAULT 0;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[TestItems] ADD [ProcessTime] int NOT NULL DEFAULT 0;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[TestItems] ADD [TestSubGroupId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[TestGroups] ADD [MovementOrder] int NOT NULL DEFAULT 0;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[TestGroups] ADD [MovementRoomNo] nvarchar(250) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[TestGroups] ADD [TokenOrder] int NOT NULL DEFAULT 0;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[ReportParameters] ADD [FontSize] int NOT NULL DEFAULT 0;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[ReportParameters] ADD [IsBold] bit NOT NULL DEFAULT CAST(0 AS bit);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[ReportParameters] ADD [IsGroupTitle] bit NOT NULL DEFAULT CAST(0 AS bit);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[ReportParameters] ADD [IsItalic] bit NOT NULL DEFAULT CAST(0 AS bit);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[ReportParameters] ADD [NormalRangeChild] nvarchar(250) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[ReportParameters] ADD [Remarks] nvarchar(500) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[ReportParameters] ADD [ShortName] nvarchar(250) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[ReportParameters] ADD [TestMethodId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[Patients] ADD [Title] nvarchar(250) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[InvestigationDetails] ADD [IsUrgent] bit NOT NULL DEFAULT CAST(0 AS bit);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[InvestigationDetails] ADD [Note] nvarchar(500) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[InvestigationDetails] ADD [ParentDetailId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[InvestigationDetails] ADD [Quantity] int NOT NULL DEFAULT 0;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    CREATE TABLE [diag].[TestItemConsumables] (
+        [Id] int NOT NULL IDENTITY,
+        [TestItemId] int NOT NULL,
+        [ConsumableItemId] int NOT NULL,
+        [Quantity] int NOT NULL,
+        [IsActive] bit NOT NULL,
+        [IsDeleted] bit NOT NULL,
+        [CreatedBy] int NULL,
+        [CreatedAt] datetime2 NOT NULL,
+        [UpdatedBy] int NULL,
+        [UpdatedAt] datetime2 NULL,
+        CONSTRAINT [PK_TestItemConsumables] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_TestItemConsumables_TestItems_ConsumableItemId] FOREIGN KEY ([ConsumableItemId]) REFERENCES [diag].[TestItems] ([Id]) ON DELETE NO ACTION,
+        CONSTRAINT [FK_TestItemConsumables_TestItems_TestItemId] FOREIGN KEY ([TestItemId]) REFERENCES [diag].[TestItems] ([Id]) ON DELETE NO ACTION
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    CREATE TABLE [diag].[TestMethods] (
+        [Id] int NOT NULL IDENTITY,
+        [IsActive] bit NOT NULL,
+        [IsDeleted] bit NOT NULL,
+        [CreatedBy] int NULL,
+        [CreatedAt] datetime2 NOT NULL,
+        [UpdatedBy] int NULL,
+        [UpdatedAt] datetime2 NULL,
+        [Code] nvarchar(30) NULL,
+        [Name] nvarchar(250) NOT NULL,
+        [SortOrder] int NOT NULL,
+        CONSTRAINT [PK_TestMethods] PRIMARY KEY ([Id])
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    CREATE TABLE [diag].[TestSubGroups] (
+        [Id] int NOT NULL IDENTITY,
+        [TestGroupId] int NOT NULL,
+        [IsActive] bit NOT NULL,
+        [IsDeleted] bit NOT NULL,
+        [CreatedBy] int NULL,
+        [CreatedAt] datetime2 NOT NULL,
+        [UpdatedBy] int NULL,
+        [UpdatedAt] datetime2 NULL,
+        [Code] nvarchar(30) NULL,
+        [Name] nvarchar(250) NOT NULL,
+        [SortOrder] int NOT NULL,
+        CONSTRAINT [PK_TestSubGroups] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_TestSubGroups_TestGroups_TestGroupId] FOREIGN KEY ([TestGroupId]) REFERENCES [diag].[TestGroups] ([Id]) ON DELETE NO ACTION
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    CREATE INDEX [IX_TestItems_DefaultVacutainerId] ON [diag].[TestItems] ([DefaultVacutainerId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    CREATE INDEX [IX_TestItems_TestSubGroupId] ON [diag].[TestItems] ([TestSubGroupId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    CREATE INDEX [IX_ReportParameters_TestMethodId] ON [diag].[ReportParameters] ([TestMethodId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    CREATE INDEX [IX_TestItemConsumables_ConsumableItemId] ON [diag].[TestItemConsumables] ([ConsumableItemId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_TestItemConsumables_TestItemId_ConsumableItemId] ON [diag].[TestItemConsumables] ([TestItemId], [ConsumableItemId]) WHERE [IsDeleted] = 0');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_TestMethods_Code] ON [diag].[TestMethods] ([Code]) WHERE [Code] IS NOT NULL AND [IsDeleted] = 0');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_TestSubGroups_Code] ON [diag].[TestSubGroups] ([Code]) WHERE [Code] IS NOT NULL AND [IsDeleted] = 0');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    CREATE INDEX [IX_TestSubGroups_TestGroupId] ON [diag].[TestSubGroups] ([TestGroupId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[ReportParameters] ADD CONSTRAINT [FK_ReportParameters_TestMethods_TestMethodId] FOREIGN KEY ([TestMethodId]) REFERENCES [diag].[TestMethods] ([Id]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[TestItems] ADD CONSTRAINT [FK_TestItems_TestSubGroups_TestSubGroupId] FOREIGN KEY ([TestSubGroupId]) REFERENCES [diag].[TestSubGroups] ([Id]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    ALTER TABLE [diag].[TestItems] ADD CONSTRAINT [FK_TestItems_Vacutainers_DefaultVacutainerId] FOREIGN KEY ([DefaultVacutainerId]) REFERENCES [diag].[Vacutainers] ([Id]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102052340_TrainingSession1Features'
+)
+BEGIN
+    INSERT INTO [admin].[__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261102052340_TrainingSession1Features', N'10.0.12');
+END;
+
+COMMIT;
+GO
+

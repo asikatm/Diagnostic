@@ -247,13 +247,23 @@ public class SampleService(DiagnosticDbContext db, NumberSequenceService numbers
 public class VacutainerMap
 {
     private readonly List<VacuMachineMapping> _rows;
-    private VacutainerMap(List<VacuMachineMapping> rows) => _rows = rows;
+    private readonly Dictionary<int, Vacutainer> _defaults;
+
+    private VacutainerMap(List<VacuMachineMapping> rows, Dictionary<int, Vacutainer> defaults)
+    {
+        _rows = rows;
+        _defaults = defaults;
+    }
 
     public static async Task<VacutainerMap> LoadAsync(DiagnosticDbContext db) =>
         new(await db.VacuMachineMappings.AsNoTracking().Include(m => m.Vacutainer).Include(m => m.Machine)
-            .Where(m => m.IsActive).ToListAsync());
+                .Where(m => m.IsActive).ToListAsync(),
+            await db.TestItems.AsNoTracking().Where(t => t.DefaultVacutainerId != null)
+                .Select(t => new { t.Id, t.DefaultVacutainer }).ToDictionaryAsync(t => t.Id, t => t.DefaultVacutainer!));
 
-    public Vacutainer? Resolve(int testItemId, int testGroupId) => Mapping(testItemId, testGroupId)?.Vacutainer;
+    /// <summary>Mapping (item → group) first, then the test item's default vacutainer.</summary>
+    public Vacutainer? Resolve(int testItemId, int testGroupId) =>
+        Mapping(testItemId, testGroupId)?.Vacutainer ?? _defaults.GetValueOrDefault(testItemId);
 
     public VacuMachineMapping? Mapping(int testItemId, int testGroupId) =>
         _rows.FirstOrDefault(m => m.TestItemId == testItemId)

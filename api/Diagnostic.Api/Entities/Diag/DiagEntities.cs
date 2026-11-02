@@ -18,6 +18,34 @@ public class TestGroup : MasterEntity
     public Department? Department { get; set; }
     /// <summary>Heading printed on the lab report (e.g. "HAEMATOLOGY REPORT").</summary>
     public string? ReportHeading { get; set; }
+    /// <summary>Room the patient goes to for this group (printed on the token / receipt).</summary>
+    public string? MovementRoomNo { get; set; }
+    public int TokenOrder { get; set; }
+    /// <summary>Order in which the patient visits the rooms.</summary>
+    public int MovementOrder { get; set; }
+}
+
+/// <summary>Optional finer grouping inside a test group (e.g. Biochemistry → Lipid, Liver function).</summary>
+public class TestSubGroup : MasterEntity
+{
+    public int TestGroupId { get; set; }
+    public TestGroup? TestGroup { get; set; }
+}
+
+/// <summary>Analytical method printed against a report parameter (ELISA, Chemiluminescence …).</summary>
+public class TestMethod : MasterEntity { }
+
+/// <summary>
+/// Consumables billed automatically with a test (Needle &amp; Tourniquet mapping): when the test is billed,
+/// <see cref="ConsumableItemId"/> is added to the invoice <see cref="Quantity"/> times.
+/// </summary>
+public class TestItemConsumable : BaseEntity
+{
+    public int TestItemId { get; set; }
+    public TestItem? TestItem { get; set; }
+    public int ConsumableItemId { get; set; }
+    public TestItem? ConsumableItem { get; set; }
+    public int Quantity { get; set; } = 1;
 }
 
 public class Specimen : MasterEntity { }
@@ -42,8 +70,20 @@ public class TestItem : MasterEntity
 {
     public int TestGroupId { get; set; }
     public TestGroup? TestGroup { get; set; }
+    public int? TestSubGroupId { get; set; }
+    public TestSubGroup? TestSubGroup { get; set; }
     public string? ShortName { get; set; }
     public decimal Price { get; set; }
+    /// <summary>Tube used when no Vacu &amp; Machine mapping exists for the test.</summary>
+    public int? DefaultVacutainerId { get; set; }
+    public Vacutainer? DefaultVacutainer { get; set; }
+    public int NumberOfSample { get; set; } = 1;
+    /// <summary>Lab processing time in hours (information for staff).</summary>
+    public int ProcessTime { get; set; }
+    /// <summary>Patient must be fasting – shown as a warning at billing.</summary>
+    public bool IsFasting { get; set; }
+    /// <summary>Needle, tourniquet, tube … billed as an item, never sampled or reported.</summary>
+    public bool IsConsumable { get; set; }
     public decimal VatPercent { get; set; }
     public bool IsDiscountAllowed { get; set; } = true;
     public decimal MaxDiscountPercent { get; set; } = 100;
@@ -63,12 +103,23 @@ public class ReportParameter : BaseEntity
     public int TestItemId { get; set; }
     [JsonIgnore] public TestItem? TestItem { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string? ShortName { get; set; }
     /// <summary>Sub-heading printed above the parameter group (e.g. "DIFFERENTIAL COUNT").</summary>
     public string? GroupHeading { get; set; }
+    /// <summary>Row is only a title on the report (no result is entered).</summary>
+    public bool IsGroupTitle { get; set; }
     public string? Unit { get; set; }
     public string? NormalRange { get; set; }
     public string? NormalRangeMale { get; set; }
     public string? NormalRangeFemale { get; set; }
+    /// <summary>Reference value used for patients under 12 years.</summary>
+    public string? NormalRangeChild { get; set; }
+    public int? TestMethodId { get; set; }
+    public TestMethod? TestMethod { get; set; }
+    public int FontSize { get; set; } = 10;
+    public bool IsBold { get; set; }
+    public bool IsItalic { get; set; }
+    public string? Remarks { get; set; }
     public decimal? LowValue { get; set; }
     public decimal? HighValue { get; set; }
     public string? Method { get; set; }
@@ -200,6 +251,8 @@ public class DiscountSetup : MasterEntity
 public class Patient : BaseEntity
 {
     public string PatientCode { get; set; } = string.Empty;
+    /// <summary>Mr., Mrs., Ms., Miss, Master, Baby, Dr.</summary>
+    public string? Title { get; set; }
     public string Name { get; set; } = string.Empty;
     public Gender Gender { get; set; }
     public DateOnly? DateOfBirth { get; set; }
@@ -253,7 +306,13 @@ public class InvestigationDetail : BaseEntity
     [JsonIgnore] public Investigation? Investigation { get; set; }
     public int TestItemId { get; set; }
     public TestItem? TestItem { get; set; }
+    /// <summary>Price of one unit; the line amount is UnitPrice × Quantity.</summary>
     public decimal UnitPrice { get; set; }
+    public int Quantity { get; set; } = 1;
+    public bool IsUrgent { get; set; }
+    public string? Note { get; set; }
+    /// <summary>Set on consumable lines (needle, tourniquet …) added automatically for this test line.</summary>
+    public int? ParentDetailId { get; set; }
     public decimal DiscountAmount { get; set; }
     public decimal VatAmount { get; set; }
     public decimal NetAmount { get; set; }

@@ -50,6 +50,9 @@ public class DiagnosticDbContext(DbContextOptions<DiagnosticDbContext> options, 
     public DbSet<Doctor> Doctors => Set<Doctor>();
     public DbSet<DiscountSetup> DiscountSetups => Set<DiscountSetup>();
     public DbSet<Media> Medias => Set<Media>();
+    public DbSet<TestSubGroup> TestSubGroups => Set<TestSubGroup>();
+    public DbSet<TestMethod> TestMethods => Set<TestMethod>();
+    public DbSet<TestItemConsumable> TestItemConsumables => Set<TestItemConsumable>();
     public DbSet<MediaCommissionSetup> MediaCommissionSetups => Set<MediaCommissionSetup>();
     public DbSet<Patient> Patients => Set<Patient>();
     public DbSet<Investigation> Investigations => Set<Investigation>();
@@ -222,6 +225,7 @@ public class DiagnosticDbContext(DbContextOptions<DiagnosticDbContext> options, 
         {
             e.ToTable("ReportParameters", s);
             e.Property(x => x.Options).HasMaxLength(500);
+            e.Property(x => x.Remarks).HasMaxLength(500);
             e.Property(x => x.LowValue).HasPrecision(18, 4);
             e.Property(x => x.HighValue).HasPrecision(18, 4);
             e.HasOne(x => x.TestItem).WithMany(x => x.Parameters).HasForeignKey(x => x.TestItemId).OnDelete(DeleteBehavior.Cascade);
@@ -245,6 +249,16 @@ public class DiagnosticDbContext(DbContextOptions<DiagnosticDbContext> options, 
         b.Entity<LetterHead>(e => { e.ToTable("LetterHeads", s); UniqueCode(e); e.Property(x => x.FooterText).HasMaxLength(1000); });
         b.Entity<Doctor>(e => { e.ToTable("Doctors", s); UniqueCode(e); e.Property(x => x.CommissionPercent).HasPrecision(5, 2); });
         b.Entity<DiscountSetup>(e => { e.ToTable("DiscountSetups", s); UniqueCode(e); });
+
+        b.Entity<TestSubGroup>(e => { e.ToTable("TestSubGroups", s); UniqueCode(e); });
+        b.Entity<TestMethod>(e => { e.ToTable("TestMethods", s); UniqueCode(e); });
+        b.Entity<TestItemConsumable>(e =>
+        {
+            e.ToTable("TestItemConsumables", s);
+            e.HasOne(x => x.TestItem).WithMany().HasForeignKey(x => x.TestItemId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.ConsumableItem).WithMany().HasForeignKey(x => x.ConsumableItemId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => new { x.TestItemId, x.ConsumableItemId }).IsUnique().HasFilter("[IsDeleted] = 0");
+        });
 
         b.Entity<Media>(e =>
         {
@@ -286,6 +300,7 @@ public class DiagnosticDbContext(DbContextOptions<DiagnosticDbContext> options, 
             e.HasOne(x => x.Investigation).WithMany(x => x.Details).HasForeignKey(x => x.InvestigationId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.SampleCollection).WithMany(x => x.Details).HasForeignKey(x => x.SampleCollectionId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => x.Status);
+            e.Property(x => x.Note).HasMaxLength(500);
         });
 
         b.Entity<InvestigationPayment>(e =>

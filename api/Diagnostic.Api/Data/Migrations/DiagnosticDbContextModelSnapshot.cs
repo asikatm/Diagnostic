@@ -1431,6 +1431,9 @@ namespace Diagnostic.Api.Data.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsUrgent")
+                        .HasColumnType("bit");
+
                     b.Property<decimal>("MediaCommission")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
@@ -1438,6 +1441,16 @@ namespace Diagnostic.Api.Data.Migrations
                     b.Property<decimal>("NetAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("ParentDetailId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
 
                     b.Property<int?>("SampleCollectionId")
                         .HasColumnType("int");
@@ -2178,6 +2191,10 @@ namespace Diagnostic.Api.Data.Migrations
                     b.Property<int?>("ReligionId")
                         .HasColumnType("int");
 
+                    b.Property<string>("Title")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
@@ -2267,6 +2284,9 @@ namespace Diagnostic.Api.Data.Migrations
                         .HasMaxLength(250)
                         .HasColumnType("nvarchar(250)");
 
+                    b.Property<int>("FontSize")
+                        .HasColumnType("int");
+
                     b.Property<string>("GroupHeading")
                         .HasMaxLength(250)
                         .HasColumnType("nvarchar(250)");
@@ -2283,7 +2303,16 @@ namespace Diagnostic.Api.Data.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsBold")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsGroupTitle")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsItalic")
                         .HasColumnType("bit");
 
                     b.Property<decimal?>("LowValue")
@@ -2303,6 +2332,10 @@ namespace Diagnostic.Api.Data.Migrations
                         .HasMaxLength(250)
                         .HasColumnType("nvarchar(250)");
 
+                    b.Property<string>("NormalRangeChild")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
                     b.Property<string>("NormalRangeFemale")
                         .HasMaxLength(250)
                         .HasColumnType("nvarchar(250)");
@@ -2315,10 +2348,21 @@ namespace Diagnostic.Api.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ShortName")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
                     b.Property<int>("SortOrder")
                         .HasColumnType("int");
 
                     b.Property<int>("TestItemId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("TestMethodId")
                         .HasColumnType("int");
 
                     b.Property<string>("Unit")
@@ -2334,6 +2378,8 @@ namespace Diagnostic.Api.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("TestItemId");
+
+                    b.HasIndex("TestMethodId");
 
                     b.ToTable("ReportParameters", "diag");
                 });
@@ -2506,6 +2552,13 @@ namespace Diagnostic.Api.Data.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<int>("MovementOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("MovementRoomNo")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(250)
@@ -2519,6 +2572,9 @@ namespace Diagnostic.Api.Data.Migrations
                         .HasColumnType("nvarchar(250)");
 
                     b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TokenOrder")
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("UpdatedAt")
@@ -2562,13 +2618,22 @@ namespace Diagnostic.Api.Data.Migrations
                         .HasMaxLength(250)
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int?>("DefaultVacutainerId")
+                        .HasColumnType("int");
+
                     b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsConsumable")
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsDiscountAllowed")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsFasting")
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsOutsource")
@@ -2583,9 +2648,15 @@ namespace Diagnostic.Api.Data.Migrations
                         .HasMaxLength(250)
                         .HasColumnType("nvarchar(250)");
 
+                    b.Property<int>("NumberOfSample")
+                        .HasColumnType("int");
+
                     b.Property<decimal>("Price")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("ProcessTime")
+                        .HasColumnType("int");
 
                     b.Property<bool>("RequiresSample")
                         .HasColumnType("bit");
@@ -2608,6 +2679,9 @@ namespace Diagnostic.Api.Data.Migrations
                     b.Property<int>("TestGroupId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("TestSubGroupId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
@@ -2624,13 +2698,162 @@ namespace Diagnostic.Api.Data.Migrations
                         .IsUnique()
                         .HasFilter("[Code] IS NOT NULL AND [IsDeleted] = 0");
 
+                    b.HasIndex("DefaultVacutainerId");
+
                     b.HasIndex("Name");
 
                     b.HasIndex("SpecimenId");
 
                     b.HasIndex("TestGroupId");
 
+                    b.HasIndex("TestSubGroupId");
+
                     b.ToTable("TestItems", "diag");
+                });
+
+            modelBuilder.Entity("Diagnostic.Api.Entities.Diag.TestItemConsumable", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConsumableItemId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TestItemId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedBy")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConsumableItemId");
+
+                    b.HasIndex("TestItemId", "ConsumableItemId")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("TestItemConsumables", "diag");
+                });
+
+            modelBuilder.Entity("Diagnostic.Api.Entities.Diag.TestMethod", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedBy")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasFilter("[Code] IS NOT NULL AND [IsDeleted] = 0");
+
+                    b.ToTable("TestMethods", "diag");
+                });
+
+            modelBuilder.Entity("Diagnostic.Api.Entities.Diag.TestSubGroup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TestGroupId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedBy")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasFilter("[Code] IS NOT NULL AND [IsDeleted] = 0");
+
+                    b.HasIndex("TestGroupId");
+
+                    b.ToTable("TestSubGroups", "diag");
                 });
 
             modelBuilder.Entity("Diagnostic.Api.Entities.Diag.VacuMachineMapping", b =>
@@ -3148,7 +3371,13 @@ namespace Diagnostic.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Diagnostic.Api.Entities.Diag.TestMethod", "TestMethod")
+                        .WithMany()
+                        .HasForeignKey("TestMethodId");
+
                     b.Navigation("TestItem");
+
+                    b.Navigation("TestMethod");
                 });
 
             modelBuilder.Entity("Diagnostic.Api.Entities.Diag.SampleCollection", b =>
@@ -3200,6 +3429,10 @@ namespace Diagnostic.Api.Data.Migrations
 
             modelBuilder.Entity("Diagnostic.Api.Entities.Diag.TestItem", b =>
                 {
+                    b.HasOne("Diagnostic.Api.Entities.Diag.Vacutainer", "DefaultVacutainer")
+                        .WithMany()
+                        .HasForeignKey("DefaultVacutainerId");
+
                     b.HasOne("Diagnostic.Api.Entities.Diag.Specimen", "Specimen")
                         .WithMany()
                         .HasForeignKey("SpecimenId");
@@ -3210,7 +3443,45 @@ namespace Diagnostic.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Diagnostic.Api.Entities.Diag.TestSubGroup", "TestSubGroup")
+                        .WithMany()
+                        .HasForeignKey("TestSubGroupId");
+
+                    b.Navigation("DefaultVacutainer");
+
                     b.Navigation("Specimen");
+
+                    b.Navigation("TestGroup");
+
+                    b.Navigation("TestSubGroup");
+                });
+
+            modelBuilder.Entity("Diagnostic.Api.Entities.Diag.TestItemConsumable", b =>
+                {
+                    b.HasOne("Diagnostic.Api.Entities.Diag.TestItem", "ConsumableItem")
+                        .WithMany()
+                        .HasForeignKey("ConsumableItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Diagnostic.Api.Entities.Diag.TestItem", "TestItem")
+                        .WithMany()
+                        .HasForeignKey("TestItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ConsumableItem");
+
+                    b.Navigation("TestItem");
+                });
+
+            modelBuilder.Entity("Diagnostic.Api.Entities.Diag.TestSubGroup", b =>
+                {
+                    b.HasOne("Diagnostic.Api.Entities.Diag.TestGroup", "TestGroup")
+                        .WithMany()
+                        .HasForeignKey("TestGroupId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.Navigation("TestGroup");
                 });

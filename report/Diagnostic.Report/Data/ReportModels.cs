@@ -123,6 +123,9 @@ public class LabResultRow
     public string ParameterName { get; set; } = "";
     public string? GroupHeading { get; set; }
     public string? ResultValue { get; set; }
+    public bool IsGroupTitle { get; set; }
+    public bool IsBold { get; set; }
+    public bool IsItalic { get; set; }
     public string? Unit { get; set; }
     public string? NormalRange { get; set; }
     public string? Flag { get; set; }

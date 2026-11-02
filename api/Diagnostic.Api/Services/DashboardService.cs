@@ -32,7 +32,7 @@ public class DashboardService(DiagnosticDbContext db)
         var refund = await pay.Where(p => p.PaymentType == PaymentType.Refund).SumAsync(p => (decimal?)p.Amount) ?? 0;
         var totalDue = await db.Investigations.Where(i => i.DueAmount > 0).SumAsync(i => (decimal?)i.DueAmount) ?? 0;
 
-        var status = await db.InvestigationDetails.AsNoTracking()
+        var status = await db.InvestigationDetails.AsNoTracking().Where(d => !d.TestItem!.IsConsumable)
             .Where(d => d.Status != TestStatus.Delivered && d.Status != TestStatus.Cancelled)
             .GroupBy(d => new { d.Status, d.TestItem!.RequiresSample })
             .Select(g => new { g.Key.Status, g.Key.RequiresSample, Count = g.Count() }).ToListAsync();

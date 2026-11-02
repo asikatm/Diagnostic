@@ -107,9 +107,17 @@ public class LabReportDocument(LabReportData data, bool showLetterHead) : IDocum
                     t.Cell().ColumnSpan(4).PaddingTop(5).PaddingBottom(1).Text(r.GroupHeading).SemiBold().FontSize(8.5f).Underline();
                 lastHeading = r.GroupHeading;
 
+                if (r.IsGroupTitle)
+                {
+                    t.Cell().ColumnSpan(4).PaddingTop(5).PaddingBottom(1).Text(r.ParameterName).Bold().FontSize(9);
+                    continue;
+                }
+
                 var abnormal = r.Flag is "High" or "Low";
-                t.Cell().BorderBottom(0.3f).BorderColor(Theme.Line).Padding(3)
+                var name = t.Cell().BorderBottom(0.3f).BorderColor(Theme.Line).Padding(3)
                     .PaddingLeft(string.IsNullOrWhiteSpace(r.GroupHeading) ? 3 : 10).Text(r.ParameterName);
+                if (r.IsBold) name.Bold();
+                if (r.IsItalic) name.Italic();
                 var result = t.Cell().BorderBottom(0.3f).BorderColor(Theme.Line).Padding(3)
                     .Text((r.ResultValue ?? "") + (r.Flag == "High" ? "  H" : r.Flag == "Low" ? "  L" : ""));
                 if (abnormal) result.Bold();

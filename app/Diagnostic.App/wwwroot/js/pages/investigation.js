@@ -19,19 +19,16 @@ App.ready(async () => {
         ? 'Commission is calculated from Media Commission Setup when the invoice is saved.' : '';
     $('package').innerHTML = App.options(packages.map(p => ({ id: p.id, name: `${p.name} (${App.money(p.packagePrice)})` })), '', '-- OPD package (optional) --');
     $('discountSetup').innerHTML = App.options(discounts.map(d => ({ id: d.id, name: `${d.name}` })), '', 'None');
-    $('payMode').innerHTML = App.options(lookups.paymentModes, lookups.paymentModes.find(m => m.code === 'CASH')?.id, null);
     $('autoPrint').checked = App.store.get('diag.autoPrintReceipt') ?? true;
     $('autoPrint').onchange = e => App.store.set('diag.autoPrintReceipt', e.target.checked);
 
-    function fillChannels() {
-        const mode = lookups.paymentModes.find(m => String(m.id) === $('payMode').value);
-        const ch = lookups.paymentChannels.filter(c => String(c.paymentModeId) === $('payMode').value);
-        $('payChannel').innerHTML = App.options(ch, '', ch.length ? '-- Select --' : 'N/A');
-        $('payChannel').disabled = ch.length === 0;
-        $('payRefLabel').classList.toggle('required', !!mode?.requiresReference);
-    }
-    $('payMode').onchange = fillChannels;
-    fillChannels();
+    // Cash / card / mobile banking are taken together (split payment), like the counter in the training video.
+    const modeByCode = code => lookups.paymentModes.find(m => m.code === code);
+    const channels = code => lookups.paymentChannels.filter(c => c.paymentModeId === modeByCode(code)?.id);
+    $('cardChannel').innerHTML = App.options(channels('CARD'), '', 'Select…');
+    $('mobileChannel').innerHTML = App.options(channels('MFS'), '', 'Select…');
+    if (!modeByCode('CARD')) ['cardChannel', 'payCard', 'cardRef'].forEach(id => $(id).disabled = true);
+    if (!modeByCode('MFS')) ['mobileChannel', 'payMobile', 'mobileRef'].forEach(id => $(id).disabled = true);
 
     // ------------------------------------------------------------ autocomplete helper
     function autocomplete(input, box, fetcher, render, pick) {
@@ -74,7 +71,7 @@ App.ready(async () => {
         $('btnNewPatient').classList.toggle('d-none', !p);
         $('patientInfo').classList.toggle('d-none', !p);
         if (p) {
-            $('pName').value = p.name; $('pGender').value = p.gender; $('pPhone').value = p.phone || ''; $('pAddress').value = p.address || '';
+            $('pTitle').value = p.title || ''; $('pName').value = p.name; $('pGender').value = p.gender; $('pPhone').value = p.phone || ''; $('pAddress').value = p.address || '';
             $('pDob').value = p.dateOfBirth || '';
             fillAgeFromDob();
             $('patientInfo').innerHTML = `Existing patient <b>${App.esc(p.patientCode)}</b>`;
@@ -125,12 +122,15 @@ App.ready(async () => {
     // ------------------------------------------------------------ tests
     autocomplete($('testSearch'), $('testResults'),
         q => App.api('/api/diag/test-items/search' + App.qs({ q })),
-        t => `<span><b>${App.esc(t.name)}</b> <span class="text-muted small">${App.esc(t.code)} · ${App.esc(t.group)}</span></span><span class="money">${App.money(t.price)}</span>`,
+        t => `<span><b>${App.esc(t.name)}</b> <span class="text-muted small">${App.esc(t.code)} · ${App.esc(t.group)}</span>
+                ${t.isFasting ? '<span class="chip text-danger ms-1">Fasting</span>' : ''}</span><span class="money">${App.money(t.price)}</span>`,
         t => {
             $('testSearch').value = '';
             if (state.lines.some(l => l.id === t.id)) { App.toast(`${t.name} is already added.`, 'warning'); return; }
-            state.lines.push({ id: t.id, name: t.name, price: t.price, vatPercent: t.vatPercent, groupId: t.testGroupId,
-                allowed: t.isDiscountAllowed, maxPct: t.maxDiscountPercent, manual: 0 });
+            if (t.isFasting) App.toast(`${t.name} needs a fasting sample – please confirm with the patient.`, 'warning');
+            state.lines.push({ id: t.id, name: t.name, unit: t.price, qty: 1, vatPercent: t.vatPercent, groupId: t.testGroupId,
+                allowed: t.isDiscountAllowed, maxPct: t.maxDiscountPercent, discPct: 0, urgent: false, note: '',
+                consumables: t.consumables || [] });
             render();
         });
 
@@ -141,64 +141,91 @@ App.ready(async () => {
             const clash = state.lines.filter(l => state.pkg.items.some(i => i.testItemId === l.id));
             state.lines = state.lines.filter(l => !clash.includes(l));
             if (clash.length) App.toast(`Removed tests already in the package: ${clash.map(c => c.name).join(', ')}`, 'warning');
-            state.lines.unshift(...state.pkg.items.map(i => ({ id: i.testItemId, name: i.testName, price: i.itemPrice, vatPercent: i.vatPercent,
-                groupId: i.testGroupId, fromPackage: true, allowed: false, maxPct: 0, manual: 0 })));
+            state.lines.unshift(...state.pkg.items.map(i => ({ id: i.testItemId, name: i.testName, unit: i.itemPrice, qty: 1, vatPercent: i.vatPercent,
+                groupId: i.testGroupId, fromPackage: true, allowed: false, maxPct: 0, discPct: 0, consumables: [] })));
         }
         render();
     };
 
+    // Same rules as the API: line % discount → scheme → extra (flat, spread by amount). Consumables are never discounted.
     function calculate() {
-        const lines = state.lines.map(l => ({ ...l, max: l.fromPackage || !l.allowed ? 0 : round2(l.price * l.maxPct / 100), disc: Math.min(l.manual, l.price) }));
-        const spread = (targets, amount) => {
+        const rows = [];
+        state.lines.forEach((l, idx) => {
+            const amount = round2(l.unit * l.qty);
+            const max = l.fromPackage || !l.allowed ? 0 : round2(amount * l.maxPct / 100);
+            rows.push({ ...l, idx, amount, max, disc: Math.min(max, round2(amount * (l.discPct || 0) / 100)) });
+            (l.consumables || []).forEach(c => rows.push({ name: c.name, unit: c.price, qty: c.quantity, amount: round2(c.price * c.quantity),
+                vatPercent: c.vatPercent, max: 0, disc: 0, consumable: true, parentIdx: idx }));
+        });
+        const spread = (targets, amountToGive) => {
             const room = targets.reduce((s, l) => s + l.max - l.disc, 0);
-            amount = Math.min(amount, room);
+            amountToGive = Math.min(amountToGive, room);
             const cand = targets.filter(l => l.max - l.disc > 0);
-            const basis = cand.reduce((s, l) => s + l.price, 0);
-            let remaining = amount;
+            const basis = cand.reduce((s, l) => s + l.amount, 0);
+            let remaining = amountToGive;
             cand.forEach((l, i) => {
                 if (remaining <= 0) return;
-                let share = i === cand.length - 1 ? remaining : round2(amount * l.price / basis);
+                let share = i === cand.length - 1 ? remaining : round2(amountToGive * l.amount / basis);
                 share = Math.min(share, remaining, l.max - l.disc);
                 l.disc = round2(l.disc + share); remaining = round2(remaining - share);
             });
             for (const l of targets) { if (remaining <= 0) break; const add = Math.min(remaining, l.max - l.disc); l.disc = round2(l.disc + add); remaining = round2(remaining - add); }
-            return room;
         };
+        const tests = rows.filter(r => !r.consumable);
         const setup = discounts.find(d => String(d.id) === $('discountSetup').value);
         if (setup) {
-            const eligible = lines.filter(l => (!setup.testItemId || l.id === setup.testItemId) && (!setup.testGroupId || l.groupId === setup.testGroupId));
-            if (setup.discountType === 'Percent') eligible.forEach(l => l.disc = Math.min(l.max, round2(l.disc + l.price * setup.value / 100)));
+            const eligible = tests.filter(l => (!setup.testItemId || l.id === setup.testItemId) && (!setup.testGroupId || l.groupId === setup.testGroupId));
+            if (setup.discountType === 'Percent') eligible.forEach(l => l.disc = Math.min(l.max, round2(l.disc + l.amount * setup.value / 100)));
             else spread(eligible, setup.value);
         }
+        const room = round2(tests.reduce((s, l) => s + l.max - l.disc, 0));
         const extra = Number($('extraDiscount').value || 0);
-        const room = lines.reduce((s, l) => s + l.max - l.disc, 0);
-        if (extra > 0) spread(lines, extra);
-        lines.forEach(l => { l.vat = round2((l.price - l.disc) * (l.vatPercent || 0) / 100); l.net = round2(l.price - l.disc + l.vat); });
-        return { lines, extraRoom: room, setup };
+        if (extra > 0) spread(tests, extra);
+        rows.forEach(l => { l.vat = round2((l.amount - l.disc) * (l.vatPercent || 0) / 100); l.net = round2(l.amount - l.disc + l.vat); });
+        const discountable = round2(tests.filter(l => l.max > 0).reduce((s, l) => s + l.amount, 0));
+        return { rows, extraRoom: room, discountable };
     }
 
-    function render() {
-        const { lines, extraRoom } = calculate();
-        $('lines').innerHTML = lines.length ? lines.map((l, i) => `<tr>
-            <td class="text-muted">${i + 1}</td>
-            <td>${App.esc(l.name)} ${l.fromPackage ? '<span class="chip ms-1">Package</span>' : ''}</td>
-            <td class="money">${App.money(l.price)}</td>
-            <td class="text-end">${l.fromPackage || !l.allowed ? `<span class="money">${App.money(l.disc)}</span>`
-                : `<input type="number" min="0" max="${l.max}" class="form-control form-control-sm text-end" data-disc="${i}" value="${l.manual || ''}" placeholder="${App.money(l.disc)}">`}</td>
-            <td class="money fw-semibold">${App.money(l.net)}</td>
-            <td class="text-end">${l.fromPackage ? '' : `<button class="btn btn-sm btn-outline-danger py-0" data-rm="${i}"><i class="bi bi-x"></i></button>`}</td>
-        </tr>`).join('') : '<tr><td colspan="6" class="empty">Search and add tests, or choose a package.</td></tr>';
+    const paid = () => ['payCash', 'payCard', 'payMobile'].reduce((s, id) => s + Number($(id).value || 0), 0);
 
-        const sum = k => round2(lines.reduce((s, l) => s + l[k], 0));
-        const net = sum('net');
-        $('tGross').textContent = App.money(sum('price'));
-        $('tDiscount').textContent = App.money(sum('disc'));
+    function render() {
+        const { rows, extraRoom, discountable } = calculate();
+        let sl = 0;
+        $('lines').innerHTML = rows.length ? rows.map(l => l.consumable ? `<tr class="text-muted small">
+                <td></td><td class="ps-3"><i class="bi bi-arrow-return-right me-1"></i>${App.esc(l.name)} <span class="chip">auto</span></td>
+                <td>${l.qty}</td><td class="money">${App.money(l.unit)}</td><td></td><td></td><td></td>
+                <td class="money">${App.money(l.net)}</td><td></td></tr>`
+            : `<tr>
+                <td class="text-muted">${++sl}</td>
+                <td>${App.esc(l.name)} ${l.fromPackage ? '<span class="chip ms-1">Package</span>' : ''}</td>
+                <td>${l.fromPackage ? 1 : `<input type="number" min="1" max="100" class="form-control form-control-sm px-1" data-qty="${l.idx}" value="${l.qty}">`}</td>
+                <td class="money">${App.money(l.unit)}</td>
+                <td>${l.fromPackage || !l.allowed ? `<span class="small text-muted">${App.money(l.disc)}</span>`
+                    : `<input type="number" min="0" max="${l.maxPct}" class="form-control form-control-sm px-1" data-pct="${l.idx}" value="${l.discPct || 0}" title="Max ${l.maxPct}%">`}</td>
+                <td>${l.fromPackage ? '' : `<input class="form-control form-control-sm" data-note="${l.idx}" value="${App.esc(l.note || '')}">`}</td>
+                <td class="text-center">${l.fromPackage ? '' : `<input class="form-check-input" type="checkbox" data-urgent="${l.idx}" ${l.urgent ? 'checked' : ''}>`}</td>
+                <td class="money fw-semibold">${App.money(l.net)}</td>
+                <td class="text-end">${l.fromPackage ? '' : `<button class="btn btn-sm btn-outline-danger py-0" data-rm="${l.idx}"><i class="bi bi-trash"></i></button>`}</td>
+            </tr>`).join('') : '<tr><td colspan="9" class="empty">Search and add tests, or choose a package.</td></tr>';
+
+        const sum = k => round2(rows.reduce((s, l) => s + l[k], 0));
+        const net = sum('net'), disc = sum('disc');
+        $('tGross').textContent = App.money(sum('amount'));
+        $('tDiscountable').textContent = App.money(discountable);
+        $('tDiscount').textContent = App.money(disc);
         $('tVat').textContent = App.money(sum('vat'));
         $('tNet').textContent = App.money(net);
         $('extraDiscount').max = extraRoom;
-        if (!$('payAmount').dataset.touched) $('payAmount').value = net;
-        $('tDue').textContent = App.money(Math.max(0, net - Number($('payAmount').value || 0)));
-        state.net = net;
+        state.net = net; state.discountable = discountable; state.discount = disc;
+        if (!state.payTouched) $('payCash').value = Math.max(0, round2(net - Number($('payCard').value || 0) - Number($('payMobile').value || 0)));
+        updatePaid();
+    }
+    function updatePaid() {
+        $('tPaid').textContent = App.money(paid());
+        $('tDue').textContent = App.money(Math.max(0, state.net - paid()));
+        const needRemarks = state.discount > 0;
+        $('remarksHint').classList.toggle('d-none', !needRemarks || !!$('remarks').value.trim());
+        $('remarks').classList.toggle('is-invalid', needRemarks && !$('remarks').value.trim());
     }
 
     $('lines').addEventListener('click', e => {
@@ -206,40 +233,72 @@ App.ready(async () => {
         if (b) { state.lines.splice(Number(b.dataset.rm), 1); render(); }
     });
     $('lines').addEventListener('change', e => {
-        const inp = e.target.closest('[data-disc]');
-        if (!inp) return;
-        const line = state.lines[Number(inp.dataset.disc)];
-        const max = line.allowed ? round2(line.price * line.maxPct / 100) : 0;
-        let v = Number(inp.value || 0);
-        if (v > max) { App.toast(`Maximum discount for ${line.name} is ${App.money(max)}.`, 'warning'); v = max; }
-        line.manual = v;
+        const t = e.target, d = t.dataset;
+        if (d.qty !== undefined) state.lines[d.qty].qty = Math.min(100, Math.max(1, Math.floor(Number(t.value) || 1)));
+        else if (d.pct !== undefined) {
+            const line = state.lines[d.pct];
+            let v = Math.max(0, Number(t.value) || 0);
+            if (v > line.maxPct) { App.toast(`Maximum discount for ${line.name} is ${line.maxPct}%.`, 'warning'); v = line.maxPct; }
+            line.discPct = v;
+        }
+        else if (d.note !== undefined) { state.lines[d.note].note = t.value; return; }
+        else if (d.urgent !== undefined) { state.lines[d.urgent].urgent = t.checked; return; }
         render();
     });
     $('discountSetup').onchange = render;
-    $('extraDiscount').oninput = App.debounce(render, 300);
-    $('payAmount').oninput = () => { $('payAmount').dataset.touched = '1'; $('tDue').textContent = App.money(Math.max(0, state.net - Number($('payAmount').value || 0))); };
+    // Disc(%) works on the discountable amount and fills Disc(Tk); Disc(Tk) clears the percent.
+    $('extraPct').oninput = App.debounce(() => {
+        const pct = Math.min(100, Math.max(0, Number($('extraPct').value || 0)));
+        $('extraDiscount').value = round2(state.discountable * pct / 100);
+        render();
+    }, 300);
+    $('extraDiscount').oninput = App.debounce(() => { $('extraPct').value = 0; render(); }, 300);
+    // Cash follows "net − card − mobile" until the user types a cash amount himself.
+    $('payCash').addEventListener('input', () => { state.payTouched = true; updatePaid(); });
+    ['payCard', 'payMobile'].forEach(id => $(id).addEventListener('input', () => {
+        if (!state.payTouched)
+            $('payCash').value = Math.max(0, round2(state.net - Number($('payCard').value || 0) - Number($('payMobile').value || 0)));
+        updatePaid();
+    }));
+    $('remarks').addEventListener('input', updatePaid);
 
     // ------------------------------------------------------------ save
     function clearAll() {
         setPatient(null);
-        state.lines = []; state.pkg = null;
-        $('package').value = ''; $('discountSetup').value = ''; $('extraDiscount').value = 0; $('referDoctor').value = ''; $('media').value = ''; $('mediaInfo').textContent = '';
-        $('remarks').value = ''; $('payRef').value = ''; delete $('payAmount').dataset.touched;
+        state.lines = []; state.pkg = null; state.payTouched = false;
+        $('package').value = ''; $('discountSetup').value = ''; $('extraDiscount').value = 0; $('extraPct').value = 0;
+        $('referDoctor').value = ''; $('media').value = ''; $('mediaInfo').textContent = ''; $('pTitle').value = '';
+        ['remarks', 'cardRef', 'mobileRef'].forEach(id => $(id).value = '');
+        ['payCard', 'payMobile'].forEach(id => $(id).value = 0);
         render();
         $('pName').focus();
     }
     $('btnClear').onclick = clearAll;
 
+    function paymentRows() {
+        const rows = [];
+        const add = (amount, mode, channelId, ref, label) => {
+            if (amount <= 0) return;
+            if (!mode) throw new Error(`Payment mode for ${label} is not set up (Administrative → Payment Mode).`);
+            if (mode.requiresReference && !ref) throw new Error(`Reference is required for ${label} payment.`);
+            rows.push({ amount, paymentModeId: mode.id, paymentChannelId: channelId || null, transactionRef: ref || null });
+        };
+        add(Number($('payCash').value || 0), modeByCode('CASH'), null, null, 'cash');
+        add(Number($('payCard').value || 0), modeByCode('CARD'), Number($('cardChannel').value), $('cardRef').value.trim(), 'card');
+        add(Number($('payMobile').value || 0), modeByCode('MFS'), Number($('mobileChannel').value), $('mobileRef').value.trim(), 'mobile');
+        return rows;
+    }
+
     $('btnSave').onclick = e => App.run(async () => {
         if (!state.patient && !$('pName').value.trim()) { $('pName').focus(); throw new Error('Patient name is required.'); }
         if (state.lines.length === 0) throw new Error('Add at least one test.');
-        const amount = Number($('payAmount').value || 0);
-        if (amount > state.net + 0.001) throw new Error('Paid amount cannot be more than the net payable.');
+        if (paid() > state.net + 0.001) throw new Error('Paid amount cannot be more than the net payable.');
+        if (state.discount > 0 && !$('remarks').value.trim()) { $('remarks').focus(); throw new Error('Remarks is required when any discount is applied.'); }
 
         const dto = {
             patientId: state.patient?.id ?? null,
             patient: state.patient ? null : {
-                name: $('pName').value.trim(), gender: $('pGender').value, phone: $('pPhone').value.trim() || null,
+                title: $('pTitle').value || null, name: $('pName').value.trim(), gender: $('pGender').value, phone: $('pPhone').value.trim() || null,
                 address: $('pAddress').value.trim() || null, dateOfBirth: dobFromAge(),
             },
             patientAge: ageText(),
@@ -247,9 +306,10 @@ App.ready(async () => {
             mediaId: Number($('media').value) || null,
             opdPackageId: state.pkg?.id ?? null,
             discountSetupId: Number($('discountSetup').value) || null,
-            tests: state.lines.filter(l => !l.fromPackage).map(l => ({ testItemId: l.id, discountAmount: l.manual || 0 })),
+            tests: state.lines.filter(l => !l.fromPackage).map(l => ({ testItemId: l.id, quantity: l.qty, discountPercent: l.discPct || 0,
+                isUrgent: !!l.urgent, note: (l.note || '').trim() || null })),
             extraDiscount: Number($('extraDiscount').value || 0),
-            payment: amount > 0 ? { amount, paymentModeId: Number($('payMode').value), paymentChannelId: Number($('payChannel').value) || null, transactionRef: $('payRef').value.trim() || null } : null,
+            payments: paymentRows(),
             remarks: $('remarks').value.trim() || null,
         };
 

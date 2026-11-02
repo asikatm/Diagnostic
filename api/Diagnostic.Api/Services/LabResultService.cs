@@ -17,7 +17,8 @@ public record FinalizeInput(List<int> DetailIds, int? SignDoctorId);
 public record ReturnInput(string Reason);
 
 public record ResultParameterDto(int ParameterId, string Name, string? GroupHeading, string? Unit, string? NormalRange, decimal? LowValue,
-    decimal? HighValue, ParameterInputType InputType, string[] Options, string? Method, string? Value, ResultFlag Flag, string? Remarks);
+    decimal? HighValue, ParameterInputType InputType, string[] Options, string? Method, string? Value, ResultFlag Flag, string? Remarks,
+    bool IsGroupTitle = false, bool IsBold = false, bool IsItalic = false, string? ShortName = null);
 
 public record ResultEntryDto(int DetailId, int InvestigationId, string InvoiceNo, string PatientCode, string PatientName, Gender Gender,
     string? PatientAge, string? ReferDoctor, string TestName, string GroupName, TestResultType ResultType, TestStatus Status, string? SampleNo,
@@ -49,7 +50,7 @@ public class LabResultService(DiagnosticDbContext db, ICurrentUser currentUser)
 
     public async Task<List<WorklistItem>> WorklistAsync(WorklistQuery q)
     {
-        var query = db.InvestigationDetails.AsNoTracking().Where(d => d.Status != TestStatus.Cancelled);
+        var query = db.InvestigationDetails.AsNoTracking().Where(d => d.Status != TestStatus.Cancelled && !d.TestItem!.IsConsumable);
         if (!string.IsNullOrWhiteSpace(q.Search))
         {
             var s = q.Search.Trim();
@@ -83,7 +84,7 @@ public class LabResultService(DiagnosticDbContext db, ICurrentUser currentUser)
                     .Include(x => x.Investigation).ThenInclude(i => i!.Patient)
                     .Include(x => x.Investigation).ThenInclude(i => i!.ReferDoctor)
                     .Include(x => x.TestItem).ThenInclude(t => t!.TestGroup)
-                    .Include(x => x.TestItem).ThenInclude(t => t!.Parameters)
+                    .Include(x => x.TestItem).ThenInclude(t => t!.Parameters).ThenInclude(p => p.TestMethod)
                     .Include(x => x.SampleCollection)
                     .FirstOrDefaultAsync(x => x.Id == detailId) ?? throw new AppException("Test not found.", 404);
 
@@ -91,13 +92,14 @@ public class LabResultService(DiagnosticDbContext db, ICurrentUser currentUser)
             .FirstOrDefaultAsync(r => r.InvestigationDetailId == detailId);
         var values = report?.Results.ToDictionary(r => r.ReportParameterId) ?? [];
         var gender = d.Investigation!.Patient!.Gender;
+        var child = IsChild(d.Investigation.Patient.DateOfBirth);
 
         var parameters = d.TestItem!.Parameters.Where(p => p.IsActive).OrderBy(p => p.SortOrder).Select(p =>
         {
             values.TryGetValue(p.Id, out var v);
-            return new ResultParameterDto(p.Id, p.Name, p.GroupHeading, p.Unit, RangeFor(p, gender), p.LowValue, p.HighValue, p.InputType,
-                (p.Options ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), p.Method,
-                v?.ResultValue ?? p.DefaultValue, v?.Flag ?? ResultFlag.Normal, v?.Remarks);
+            return new ResultParameterDto(p.Id, p.Name, p.GroupHeading, p.Unit, RangeFor(p, gender, child), p.LowValue, p.HighValue, p.InputType,
+                (p.Options ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), p.TestMethod?.Name ?? p.Method,
+                v?.ResultValue ?? p.DefaultValue, v?.Flag ?? ResultFlag.Normal, v?.Remarks, p.IsGroupTitle, p.IsBold, p.IsItalic, p.ShortName);
         }).ToList();
 
         var verifiedBy = report?.VerifiedBy is { } vb ? await db.Users.Where(u => u.Id == vb).Select(u => u.FullName).FirstOrDefaultAsync() : null;
@@ -143,6 +145,10 @@ public class LabResultService(DiagnosticDbContext db, ICurrentUser currentUser)
             row.Remarks = v.Remarks;
             row.Flag = FlagFor(p, row.ResultValue);
         }
+
+        // Title rows have no value but are stored so the lab report prints them in place.
+        foreach (var p in parameters.Values.Where(p => p.IsGroupTitle && p.IsActive && report.Results.All(r => r.ReportParameterId != p.Id)))
+            report.Results.Add(new LabResult { ReportParameterId = p.Id });
 
         report.ReportText = input.ReportText;
         report.Comments = input.Comments;
@@ -284,8 +290,12 @@ public class LabResultService(DiagnosticDbContext db, ICurrentUser currentUser)
         d.Status = TestStatus.Verified;
     }
 
-    public static string? RangeFor(ReportParameter p, Gender g) => g switch
+    /// <summary>Under 12 years: the parameter's child reference value is used when it is set.</summary>
+    public static bool IsChild(DateOnly? dob) => dob.HasValue && dob.Value.AddYears(12) > DateOnly.FromDateTime(DateTime.Today);
+
+    public static string? RangeFor(ReportParameter p, Gender g, bool child = false) => g switch
     {
+        _ when child && !string.IsNullOrWhiteSpace(p.NormalRangeChild) => p.NormalRangeChild,
         Gender.Male when !string.IsNullOrWhiteSpace(p.NormalRangeMale) => p.NormalRangeMale,
         Gender.Female when !string.IsNullOrWhiteSpace(p.NormalRangeFemale) => p.NormalRangeFemale,
         _ => p.NormalRange,

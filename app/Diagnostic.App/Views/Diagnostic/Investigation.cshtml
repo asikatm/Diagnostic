@@ -24,7 +24,9 @@
                 </div>
                 <div class="alert alert-info py-2 small d-none" id="patientInfo"></div>
                 <div class="row g-2" id="patientForm">
-                    <div class="col-12"><label class="form-label required">Name</label><input class="form-control" id="pName"></div>
+                    <div class="col-3"><label class="form-label">Title</label>
+                        <select class="form-select px-2" id="pTitle"><option value="">--</option><option>Mr.</option><option>Mrs.</option><option>Ms.</option><option>Miss</option><option>Master</option><option>Baby</option><option>Dr.</option></select></div>
+                    <div class="col-9"><label class="form-label required">Full Name</label><input class="form-control" id="pName"></div>
                     <div class="col-6"><label class="form-label">Gender</label>
                         <select class="form-select" id="pGender"><option>Male</option><option>Female</option><option>Other</option></select></div>
                     <div class="col-6"><label class="form-label">Phone</label><input class="form-control" id="pPhone"></div>
@@ -60,8 +62,9 @@
                     <div class="col-md-4"><select class="form-select" id="package"></select></div>
                 </div>
                 <div class="table-responsive">
-                    <table class="table table-sm">
-                        <thead><tr><th>#</th><th>Test</th><th class="text-end">Price</th><th class="text-end" style="width:120px">Discount</th><th class="text-end">Net</th><th></th></tr></thead>
+                    <table class="table table-sm align-middle">
+                        <thead><tr><th>#</th><th>Name</th><th style="width:70px">Qty</th><th class="text-end">Rate</th><th style="width:80px">Disc(%)</th>
+                            <th style="width:140px">Note</th><th class="text-center">Urgent</th><th class="text-end">G.Tk</th><th></th></tr></thead>
                         <tbody id="lines"></tbody>
                     </table>
                 </div>
@@ -71,25 +74,33 @@
         <div class="card">
             <div class="card-body">
                 <div class="row g-3">
-                    <div class="col-md-6">
+                    <div class="col-md-7">
                         <div class="row g-2">
-                            <div class="col-8"><label class="form-label">Discount scheme</label><select class="form-select" id="discountSetup"></select></div>
-                            <div class="col-4"><label class="form-label">Extra discount</label><input type="number" min="0" class="form-control" id="extraDiscount" value="0"></div>
-                            <div class="col-6"><label class="form-label">Payment mode</label><select class="form-select" id="payMode"></select></div>
-                            <div class="col-6"><label class="form-label">Channel</label><select class="form-select" id="payChannel"></select></div>
-                            <div class="col-6"><label class="form-label" id="payRefLabel">Transaction ref.</label><input class="form-control" id="payRef"></div>
-                            <div class="col-6"><label class="form-label">Paid amount</label><input type="number" min="0" class="form-control fw-bold" id="payAmount" value="0"></div>
+                            <div class="col-6"><label class="form-label">D. Category (discount scheme)</label><select class="form-select" id="discountSetup"></select></div>
+                            <div class="col-3"><label class="form-label">Disc (%)</label><input type="number" min="0" max="100" class="form-control" id="extraPct" value="0"></div>
+                            <div class="col-3"><label class="form-label">Disc (Tk)</label><input type="number" min="0" class="form-control" id="extraDiscount" value="0"></div>
+                            <div class="col-12"><hr class="my-1"></div>
+                            <div class="col-4"><label class="form-label">Payment (cash)</label><input type="number" min="0" class="form-control fw-bold" id="payCash" value="0"></div>
+                            <div class="col-4"><label class="form-label">Select card</label><select class="form-select" id="cardChannel"></select></div>
+                            <div class="col-4"><label class="form-label">Payment (card)</label><input type="number" min="0" class="form-control" id="payCard" value="0"></div>
+                            <div class="col-4"><label class="form-label">Card ref. / approval no</label><input class="form-control" id="cardRef"></div>
+                            <div class="col-4"><label class="form-label">Select mobile</label><select class="form-select" id="mobileChannel"></select></div>
+                            <div class="col-4"><label class="form-label">Payment (mobile)</label><input type="number" min="0" class="form-control" id="payMobile" value="0"></div>
+                            <div class="col-4"><label class="form-label">Mobile trx ID</label><input class="form-control" id="mobileRef"></div>
                         </div>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-5">
                         <table class="table table-borderless totals mb-2">
-                            <tr><td>Gross total</td><td class="money" id="tGross">0.00</td></tr>
+                            <tr><td>Sub total</td><td class="money" id="tGross">0.00</td></tr>
+                            <tr><td>Discountable (Tk)</td><td class="money text-muted" id="tDiscountable">0.00</td></tr>
                             <tr><td>Discount (-)</td><td class="money" id="tDiscount">0.00</td></tr>
                             <tr><td>VAT (+)</td><td class="money" id="tVat">0.00</td></tr>
                             <tr class="grand"><td>Net payable</td><td class="money" id="tNet">0.00</td></tr>
-                            <tr><td>Due</td><td class="money text-danger fw-bold" id="tDue">0.00</td></tr>
+                            <tr><td>Paid</td><td class="money" id="tPaid">0.00</td></tr>
+                            <tr><td>Due amount</td><td class="money text-danger fw-bold" id="tDue">0.00</td></tr>
                         </table>
-                        <button class="btn btn-primary w-100 py-2" id="btnSave"><i class="bi bi-save me-1"></i>Save Invoice</button>
+                        <div class="small text-danger d-none mb-2" id="remarksHint"><i class="bi bi-exclamation-circle me-1"></i>Remarks is required when any discount is applied.</div>
+                        <button class="btn btn-primary w-100 py-2" id="btnSave"><i class="bi bi-save me-1"></i>POST (Save Invoice) <span class="small opacity-75">F9</span></button>
                     </div>
                 </div>
             </div>
