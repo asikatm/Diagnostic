@@ -65,13 +65,16 @@ App.ready(async () => {
         const waiting = d.status === 'Ordered' && d.resultType === 'Parameter';
         let lastHeading = null;
         const paramRows = d.parameters.map(p => {
-            const head = p.groupHeading && p.groupHeading !== lastHeading ? `<tr><td colspan="4" class="fw-bold small pt-2 text-decoration-underline">${App.esc(p.groupHeading)}</td></tr>` : '';
+            const head = p.groupHeading && p.groupHeading !== lastHeading ? `<tr><td colspan="5" class="fw-bold small pt-2 text-decoration-underline">${App.esc(p.groupHeading)}</td></tr>` : '';
             lastHeading = p.groupHeading;
+            // Title rows (IsGroupTitle) are printed as headings; no value is entered.
+            if (p.isGroupTitle) return `${head}<tr><td colspan="5" class="fw-bold small pt-2">${App.esc(p.name)}</td></tr>`;
             const val = App.esc(p.value ?? '');
             const inp = p.inputType === 'Option'
                 ? `<select class="form-select form-select-sm" data-p="${p.parameterId}" ${locked ? 'disabled' : ''}><option></option>${p.options.map(o => `<option ${o === p.value ? 'selected' : ''}>${App.esc(o)}</option>`).join('')}</select>`
                 : `<input class="form-control form-control-sm" data-p="${p.parameterId}" value="${val}" ${locked ? 'disabled' : ''} ${p.inputType === 'Numeric' ? 'inputmode="decimal"' : ''}>`;
             return `${head}<tr><td class="${p.groupHeading ? 'ps-3' : ''}">${App.esc(p.name)}</td><td style="width:170px">${inp}</td>
+                <td class="text-center"><input class="form-check-input" type="checkbox" data-show="${p.parameterId}" ${p.showInReport !== false ? 'checked' : ''} ${locked ? 'disabled' : ''} title="Show in report"></td>
                 <td class="small text-muted">${App.esc(p.unit || '')}</td><td class="small">${App.esc(p.normalRange || '')} <span data-flag="${p.parameterId}"></span></td></tr>`;
         }).join('');
 
@@ -85,7 +88,7 @@ App.ready(async () => {
                 ${d.returnReason ? `<div class="alert alert-danger py-2 small"><i class="bi bi-arrow-return-left me-1"></i><b>Returned by pathologist:</b> ${App.esc(d.returnReason)}</div>` : ''}
                 ${d.status === 'Finalized' || d.status === 'Delivered' ? '<div class="alert alert-success py-2 small"><i class="bi bi-patch-check me-1"></i>Finalized by the pathologist – locked.</div>' : ''}
                 ${d.resultType === 'Parameter'
-                    ? `<table class="table table-sm"><thead><tr><th>Parameter</th><th>Result</th><th>Unit</th><th>Reference</th></tr></thead><tbody>${paramRows || '<tr><td colspan="4" class="text-muted">No parameter is set up for this test (see REPORT PARAMETER).</td></tr>'}</tbody></table>`
+                    ? `<table class="table table-sm"><thead><tr><th>Parameter</th><th>Result</th><th class="text-center small">Show in<br>report</th><th>Unit</th><th>Reference</th></tr></thead><tbody>${paramRows || '<tr><td colspan="5" class="text-muted">No parameter is set up for this test (see REPORT PARAMETER).</td></tr>'}</tbody></table>`
                     : `<label class="form-label">Report / findings</label><textarea class="form-control font-monospace" rows="12" id="reportText" ${locked ? 'disabled' : ''}>${App.esc(d.reportText || '')}</textarea>`}
                 <div class="row g-2 mt-1">
                     <div class="col-md-8"><label class="form-label">Comments</label><input class="form-control" id="comments" value="${App.esc(d.comments || '')}" ${locked ? 'disabled' : ''}></div>
@@ -101,6 +104,7 @@ App.ready(async () => {
 
         const paint = () => d.parameters.forEach(p => {
             const el = $('entry').querySelector(`[data-p="${p.parameterId}"]`);
+            if (!el) return; // title row
             const f = flagFor(p, el.value.trim());
             const span = $('entry').querySelector(`[data-flag="${p.parameterId}"]`);
             span.className = 'flag-' + f; span.textContent = f === 'Normal' ? '' : (f === 'High' ? '▲ H' : '▼ L');
@@ -122,7 +126,8 @@ App.ready(async () => {
                 else {
                     if (act === 'saveVerify' && !$('signDoctor').value) throw new Error('Select the doctor who signs the report.');
                     await App.api('/api/diag/results/' + id, { method: 'PUT', body: {
-                        results: [...$('entry').querySelectorAll('[data-p]')].map(el => ({ parameterId: Number(el.dataset.p), value: el.value.trim() || null })),
+                        results: [...$('entry').querySelectorAll('[data-p]')].map(el => ({ parameterId: Number(el.dataset.p), value: el.value.trim() || null,
+                            showInReport: $('entry').querySelector(`[data-show="${el.dataset.p}"]`)?.checked ?? true })),
                         reportText: $('reportText')?.value ?? null, comments: $('comments').value.trim() || null,
                         signDoctorId: Number($('signDoctor').value) || null, verify: act === 'saveVerify' } });
                 }

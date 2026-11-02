@@ -51,6 +51,9 @@ public class DiagnosticDbContext(DbContextOptions<DiagnosticDbContext> options, 
     public DbSet<DiscountSetup> DiscountSetups => Set<DiscountSetup>();
     public DbSet<Media> Medias => Set<Media>();
     public DbSet<TestSubGroup> TestSubGroups => Set<TestSubGroup>();
+    public DbSet<DoctorSpeciality> DoctorSpecialities => Set<DoctorSpeciality>();
+    public DbSet<CommissionGroup> CommissionGroups => Set<CommissionGroup>();
+    public DbSet<MarketingArea> MarketingAreas => Set<MarketingArea>();
     public DbSet<TestMethod> TestMethods => Set<TestMethod>();
     public DbSet<TestItemConsumable> TestItemConsumables => Set<TestItemConsumable>();
     public DbSet<MediaCommissionSetup> MediaCommissionSetups => Set<MediaCommissionSetup>();
@@ -114,6 +117,7 @@ public class DiagnosticDbContext(DbContextOptions<DiagnosticDbContext> options, 
             e.ToTable("Roles", s);
             UniqueCode(e);
             e.HasIndex(x => x.Name).IsUnique().HasFilter("[IsDeleted] = 0");
+            e.Property(x => x.MaxDiscountPercent).HasPrecision(5, 2);
         });
 
         b.Entity<User>(e =>
@@ -247,10 +251,20 @@ public class DiagnosticDbContext(DbContextOptions<DiagnosticDbContext> options, 
         });
 
         b.Entity<LetterHead>(e => { e.ToTable("LetterHeads", s); UniqueCode(e); e.Property(x => x.FooterText).HasMaxLength(1000); });
-        b.Entity<Doctor>(e => { e.ToTable("Doctors", s); UniqueCode(e); e.Property(x => x.CommissionPercent).HasPrecision(5, 2); });
+        b.Entity<Doctor>(e =>
+        {
+            e.ToTable("Doctors", s);
+            UniqueCode(e);
+            e.Property(x => x.CommissionPercent).HasPrecision(5, 2);
+            e.Property(x => x.ChamberAddress).HasMaxLength(500);
+            e.Property(x => x.Details).HasMaxLength(1000);
+        });
         b.Entity<DiscountSetup>(e => { e.ToTable("DiscountSetups", s); UniqueCode(e); });
 
         b.Entity<TestSubGroup>(e => { e.ToTable("TestSubGroups", s); UniqueCode(e); });
+        b.Entity<DoctorSpeciality>(e => { e.ToTable("DoctorSpecialities", s); UniqueCode(e); });
+        b.Entity<CommissionGroup>(e => { e.ToTable("CommissionGroups", s); UniqueCode(e); e.Property(x => x.CommissionPercent).HasPrecision(5, 2); });
+        b.Entity<MarketingArea>(e => { e.ToTable("MarketingAreas", s); UniqueCode(e); });
         b.Entity<TestMethod>(e => { e.ToTable("TestMethods", s); UniqueCode(e); });
         b.Entity<TestItemConsumable>(e =>
         {

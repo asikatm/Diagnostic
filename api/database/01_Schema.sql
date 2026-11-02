@@ -2404,3 +2404,325 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[SampleCollections] ADD [CarrierUserId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [admin].[Roles] ADD [MaxDiscountPercent] decimal(5,2) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[Medias] ADD [MarketingAreaId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[LabResults] ADD [ShowInReport] bit NOT NULL DEFAULT CAST(1 AS bit);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[Investigations] ADD [MarketingAreaId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[Doctors] ADD [ChamberAddress] nvarchar(500) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[Doctors] ADD [CommissionGroupId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[Doctors] ADD [CurrentWorkPlace] nvarchar(250) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[Doctors] ADD [Details] nvarchar(1000) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[Doctors] ADD [ExtraAmount] decimal(18,2) NOT NULL DEFAULT 0.0;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[Doctors] ADD [IsChamberPractitioner] bit NOT NULL DEFAULT CAST(0 AS bit);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[Doctors] ADD [IsImagingReporter] bit NOT NULL DEFAULT CAST(0 AS bit);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[Doctors] ADD [IsSonologist] bit NOT NULL DEFAULT CAST(0 AS bit);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[Doctors] ADD [MediaId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[Doctors] ADD [PastWorkPlace] nvarchar(250) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[Doctors] ADD [SpecialityId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    CREATE TABLE [diag].[CommissionGroups] (
+        [Id] int NOT NULL IDENTITY,
+        [CommissionPercent] decimal(5,2) NOT NULL,
+        [IsActive] bit NOT NULL,
+        [IsDeleted] bit NOT NULL,
+        [CreatedBy] int NULL,
+        [CreatedAt] datetime2 NOT NULL,
+        [UpdatedBy] int NULL,
+        [UpdatedAt] datetime2 NULL,
+        [Code] nvarchar(30) NULL,
+        [Name] nvarchar(250) NOT NULL,
+        [SortOrder] int NOT NULL,
+        CONSTRAINT [PK_CommissionGroups] PRIMARY KEY ([Id])
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    CREATE TABLE [diag].[DoctorSpecialities] (
+        [Id] int NOT NULL IDENTITY,
+        [IsActive] bit NOT NULL,
+        [IsDeleted] bit NOT NULL,
+        [CreatedBy] int NULL,
+        [CreatedAt] datetime2 NOT NULL,
+        [UpdatedBy] int NULL,
+        [UpdatedAt] datetime2 NULL,
+        [Code] nvarchar(30) NULL,
+        [Name] nvarchar(250) NOT NULL,
+        [SortOrder] int NOT NULL,
+        CONSTRAINT [PK_DoctorSpecialities] PRIMARY KEY ([Id])
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    CREATE TABLE [diag].[MarketingAreas] (
+        [Id] int NOT NULL IDENTITY,
+        [IsActive] bit NOT NULL,
+        [IsDeleted] bit NOT NULL,
+        [CreatedBy] int NULL,
+        [CreatedAt] datetime2 NOT NULL,
+        [UpdatedBy] int NULL,
+        [UpdatedAt] datetime2 NULL,
+        [Code] nvarchar(30) NULL,
+        [Name] nvarchar(250) NOT NULL,
+        [SortOrder] int NOT NULL,
+        CONSTRAINT [PK_MarketingAreas] PRIMARY KEY ([Id])
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    CREATE INDEX [IX_SampleCollections_CarrierUserId] ON [diag].[SampleCollections] ([CarrierUserId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    CREATE INDEX [IX_Medias_MarketingAreaId] ON [diag].[Medias] ([MarketingAreaId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    CREATE INDEX [IX_Investigations_MarketingAreaId] ON [diag].[Investigations] ([MarketingAreaId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    CREATE INDEX [IX_Doctors_CommissionGroupId] ON [diag].[Doctors] ([CommissionGroupId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    CREATE INDEX [IX_Doctors_MediaId] ON [diag].[Doctors] ([MediaId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    CREATE INDEX [IX_Doctors_SpecialityId] ON [diag].[Doctors] ([SpecialityId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_CommissionGroups_Code] ON [diag].[CommissionGroups] ([Code]) WHERE [Code] IS NOT NULL AND [IsDeleted] = 0');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_DoctorSpecialities_Code] ON [diag].[DoctorSpecialities] ([Code]) WHERE [Code] IS NOT NULL AND [IsDeleted] = 0');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_MarketingAreas_Code] ON [diag].[MarketingAreas] ([Code]) WHERE [Code] IS NOT NULL AND [IsDeleted] = 0');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[Doctors] ADD CONSTRAINT [FK_Doctors_CommissionGroups_CommissionGroupId] FOREIGN KEY ([CommissionGroupId]) REFERENCES [diag].[CommissionGroups] ([Id]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[Doctors] ADD CONSTRAINT [FK_Doctors_DoctorSpecialities_SpecialityId] FOREIGN KEY ([SpecialityId]) REFERENCES [diag].[DoctorSpecialities] ([Id]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[Doctors] ADD CONSTRAINT [FK_Doctors_Medias_MediaId] FOREIGN KEY ([MediaId]) REFERENCES [diag].[Medias] ([Id]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[Investigations] ADD CONSTRAINT [FK_Investigations_MarketingAreas_MarketingAreaId] FOREIGN KEY ([MarketingAreaId]) REFERENCES [diag].[MarketingAreas] ([Id]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[Medias] ADD CONSTRAINT [FK_Medias_MarketingAreas_MarketingAreaId] FOREIGN KEY ([MarketingAreaId]) REFERENCES [diag].[MarketingAreas] ([Id]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    ALTER TABLE [diag].[SampleCollections] ADD CONSTRAINT [FK_SampleCollections_Users_CarrierUserId] FOREIGN KEY ([CarrierUserId]) REFERENCES [admin].[Users] ([Id]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [admin].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261102101251_TrainingSession2Marketing'
+)
+BEGIN
+    INSERT INTO [admin].[__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261102101251_TrainingSession2Marketing', N'10.0.12');
+END;
+
+COMMIT;
+GO
+

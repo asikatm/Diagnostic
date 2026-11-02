@@ -50,6 +50,7 @@ public class CreateInvestigationDto
     public int? ReferDoctorId { get; set; }
     /// <summary>Media / agent who brought the patient (earns commission).</summary>
     public int? MediaId { get; set; }
+    public int? MarketingAreaId { get; set; }
     public int? OpdPackageId { get; set; }
     public int? DiscountSetupId { get; set; }
     public List<InvestigationLineInput> Tests { get; set; } = [];
@@ -106,6 +107,7 @@ public class InvestigationService(DiagnosticDbContext db, NumberSequenceService 
             PatientAge = dto.PatientAge ?? AgeText(patient.DateOfBirth),
             ReferDoctorId = dto.ReferDoctorId,
             MediaId = dto.MediaId,
+            MarketingAreaId = dto.MarketingAreaId,
             OpdPackageId = dto.OpdPackageId,
             DiscountSetupId = dto.DiscountSetupId,
             Remarks = dto.Remarks,
@@ -113,6 +115,7 @@ public class InvestigationService(DiagnosticDbContext db, NumberSequenceService 
 
         if (lines.Any(l => l.Discount > 0) && string.IsNullOrWhiteSpace(dto.Remarks))
             throw new AppException("Remarks is required when any discount is applied.");
+        await CheckDiscountPermissionAsync(lines);
 
         var delivery = await DeliveryCalculator.CreateAsync(db, lines.Select(l => l.Item).ToList());
         var commission = dto.MediaId.HasValue ? await MediaCommissionCalculator.CreateAsync(db, dto.MediaId.Value) : null;
@@ -255,6 +258,32 @@ public class InvestigationService(DiagnosticDbContext db, NumberSequenceService 
         };
         db.Patients.Add(patient);
         return patient;
+    }
+
+    /// <summary>
+    /// Discount permission: highest discount % (of the discountable amount) the user's roles allow.
+    /// Super admin or any role without a limit = no limit; the most generous role wins.
+    /// </summary>
+    public async Task<decimal?> MaxDiscountPercentAsync()
+    {
+        if (currentUser.IsSuperAdmin) return null;
+        var roleIds = currentUser.RoleIds;
+        var limits = await db.Roles.AsNoTracking().Where(r => roleIds.Contains(r.Id) && r.IsActive)
+            .Select(r => r.MaxDiscountPercent).ToListAsync();
+        return limits.Count == 0 || limits.Any(l => l == null) ? null : limits.Max();
+    }
+
+    private async Task CheckDiscountPermissionAsync(List<Line> lines)
+    {
+        var discount = lines.Sum(l => l.Discount);
+        if (discount <= 0) return;
+        var limit = await MaxDiscountPercentAsync();
+        if (limit is null) return;
+        var discountable = lines.Where(l => l.MaxDiscount > 0).Sum(l => l.Amount);
+        var percent = discountable == 0 ? 100 : Math.Round(discount * 100m / discountable, 2);
+        if (percent > limit)
+            throw new AppException($"Your discount permission is {limit:0.##}% of the discountable amount ({discountable * limit.Value / 100m:N2} Tk). " +
+                                   $"This bill gives {percent:0.##}% ({discount:N2} Tk).", StatusCodes.Status403Forbidden);
     }
 
     private sealed class Line

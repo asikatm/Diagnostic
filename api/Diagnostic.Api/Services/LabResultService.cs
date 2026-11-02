@@ -18,7 +18,7 @@ public record ReturnInput(string Reason);
 
 public record ResultParameterDto(int ParameterId, string Name, string? GroupHeading, string? Unit, string? NormalRange, decimal? LowValue,
     decimal? HighValue, ParameterInputType InputType, string[] Options, string? Method, string? Value, ResultFlag Flag, string? Remarks,
-    bool IsGroupTitle = false, bool IsBold = false, bool IsItalic = false, string? ShortName = null);
+    bool IsGroupTitle = false, bool IsBold = false, bool IsItalic = false, string? ShortName = null, bool ShowInReport = true);
 
 public record ResultEntryDto(int DetailId, int InvestigationId, string InvoiceNo, string PatientCode, string PatientName, Gender Gender,
     string? PatientAge, string? ReferDoctor, string TestName, string GroupName, TestResultType ResultType, TestStatus Status, string? SampleNo,
@@ -30,6 +30,8 @@ public class ResultValueInput
     public int ParameterId { get; set; }
     public string? Value { get; set; }
     public string? Remarks { get; set; }
+    /// <summary>Unticked = stored but not printed on the lab report.</summary>
+    public bool ShowInReport { get; set; } = true;
 }
 
 public class SaveResultInput
@@ -99,7 +101,7 @@ public class LabResultService(DiagnosticDbContext db, ICurrentUser currentUser)
             values.TryGetValue(p.Id, out var v);
             return new ResultParameterDto(p.Id, p.Name, p.GroupHeading, p.Unit, RangeFor(p, gender, child), p.LowValue, p.HighValue, p.InputType,
                 (p.Options ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), p.TestMethod?.Name ?? p.Method,
-                v?.ResultValue ?? p.DefaultValue, v?.Flag ?? ResultFlag.Normal, v?.Remarks, p.IsGroupTitle, p.IsBold, p.IsItalic, p.ShortName);
+                v?.ResultValue ?? p.DefaultValue, v?.Flag ?? ResultFlag.Normal, v?.Remarks, p.IsGroupTitle, p.IsBold, p.IsItalic, p.ShortName, v?.ShowInReport ?? true);
         }).ToList();
 
         var verifiedBy = report?.VerifiedBy is { } vb ? await db.Users.Where(u => u.Id == vb).Select(u => u.FullName).FirstOrDefaultAsync() : null;
@@ -143,6 +145,7 @@ public class LabResultService(DiagnosticDbContext db, ICurrentUser currentUser)
             if (row is null) report.Results.Add(row = new LabResult { ReportParameterId = p.Id });
             row.ResultValue = v.Value?.Trim();
             row.Remarks = v.Remarks;
+            row.ShowInReport = v.ShowInReport;
             row.Flag = FlagFor(p, row.ResultValue);
         }
 

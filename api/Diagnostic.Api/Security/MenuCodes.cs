@@ -55,6 +55,11 @@ public static class MenuCodes
     public const string Patient = "DIAG_PATIENT";
     public const string DiagReports = "DIAG_REPORTS"; // shown under the MIS module
 
+    // Marketing
+    public const string DoctorSpeciality = "MKT_DOCTOR_SPECIALITY";
+    public const string CommissionGroup = "MKT_COMMISSION_GROUP";
+    public const string MarketingArea = "MKT_MARKETING_ZONE";
+
     // MIS
     public const string MisMediaCommission = "MIS_MEDIA_COMMISSION";
 }

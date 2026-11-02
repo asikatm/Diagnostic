@@ -34,16 +34,18 @@
             <div class="card-header d-flex align-items-center gap-3">
                 <span>Collected – not yet sent to lab</span>
                 <span class="small text-muted" id="dispSel"></span>
-                <button class="btn btn-primary btn-sm ms-auto" id="btnDispatchSel" data-need="edit"><i class="bi bi-send me-1"></i>Dispatch selected</button>
+                <select class="form-select form-select-sm ms-auto" id="carrier" style="width:220px" title="Who carries the tubes to the lab"></select>
+                <input class="form-control form-control-sm" id="dispScan" placeholder="Scan sample no to tick" style="width:170px">
+                <button class="btn btn-primary btn-sm" id="btnDispatchSel" data-need="edit"><i class="bi bi-send me-1"></i>Dispatch selected</button>
             </div>
             <div class="table-responsive"><table class="table table-sm table-hover">
-                <thead><tr><th style="width:34px"><input class="form-check-input" type="checkbox" id="dispAll"></th><th>Sample No</th><th>Invoice</th><th>Patient</th><th>Tube</th><th>Tests</th><th>Collected</th><th></th></tr></thead>
+                <thead><tr><th style="width:34px"><input class="form-check-input" type="checkbox" id="dispAll"></th><th>Sample No</th><th>Invoice</th><th>Patient</th><th>Tube</th><th>Tests</th><th>Collected</th><th class="text-end">Waiting (min)</th><th></th></tr></thead>
                 <tbody id="dispatch"></tbody></table></div>
         </div>
         <div class="card mt-3">
             <div class="card-header">Dispatched / acknowledged (selected date)</div>
             <div class="table-responsive"><table class="table table-sm">
-                <thead><tr><th>Sample No</th><th>Invoice</th><th>Patient</th><th>Tube</th><th>Tests</th><th>Dispatched</th><th>Acknowledged</th><th>Status</th></tr></thead>
+                <thead><tr><th>Sample No</th><th>Invoice</th><th>Patient</th><th>Tube</th><th>Tests</th><th>Dispatched</th><th>Carried by</th><th>Acknowledged</th><th>Status</th></tr></thead>
                 <tbody id="sent"></tbody></table></div>
         </div>
     </div>
@@ -75,6 +77,21 @@ App.ready(async () => {
     $('autoSticker').checked = App.store.get('diag.autoSticker') ?? true;
     $('autoSticker').onchange = e => App.store.set('diag.autoSticker', e.target.checked);
     const search = () => $('invoiceNo').value.trim();
+    const minutes = t => Math.max(0, Math.round((Date.now() - new Date(t)) / 60000));
+    // Carrier = staff who takes the tubes to the lab (any active user); remembered for the next dispatch.
+    App.api('/api/diag/lookups/billing').then(l => {
+        $('carrier').innerHTML = App.options(l.users || [], App.store.get('diag.carrier') || '', '-- Carried by --');
+        $('carrier').onchange = () => App.store.set('diag.carrier', $('carrier').value);
+    }).catch(() => { });
+    $('dispScan').addEventListener('keydown', e => {
+        if (e.key !== 'Enter' || !e.target.value.trim()) return;
+        const no = e.target.value.trim(); e.target.value = '';
+        const row = [...document.querySelectorAll('#dispatch tr')].find(tr => tr.textContent.includes(no));
+        const box = row?.querySelector('input[data-sel]');
+        if (!box) { App.toast(`${no} is not waiting for dispatch.`, 'warning'); return; }
+        box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true }));
+        App.toast(`${no} ticked.`);
+    });
     const tube = (name, color) => name ? `<span class="chip"><span class="dot" style="background:${App.esc(color)}"></span>${App.esc(name)}</span>` : '<span class="text-muted small">not mapped</span>';
     const printStickers = samples => { if ($('autoSticker').checked && samples.length) App.report('/api/reports/sticker?sampleIds=' + samples.map(s => s.id).join(',')); };
 
@@ -147,7 +164,8 @@ App.ready(async () => {
             <td><input class="form-check-input" type="checkbox" data-sel value="${s.id}"></td>
             <td class="fw-semibold">${App.esc(s.sampleNo)} ${s.repeatOfSampleNo ? `<span class="chip text-danger" title="Repeat of ${App.esc(s.repeatOfSampleNo)}">Repeat</span>` : ''}</td>
             <td>${App.esc(s.invoiceNo)}</td><td>${App.esc(s.patientName)}</td><td>${tube(s.vacutainer, s.colorHex)}</td>
-            <td class="small">${App.esc(s.tests)}</td><td class="small">${App.dateTime(s.collectedAt)}</td>
+            <td class="small">${App.esc(s.tests)} ${s.isUrgent ? '<span class="chip text-danger">Urgent</span>' : ''}</td><td class="small">${App.dateTime(s.collectedAt)}</td>
+            <td class="text-end ${minutes(s.collectedAt) > 30 ? 'text-danger fw-bold' : ''}">${minutes(s.collectedAt)}</td>
             <td class="text-end text-nowrap">
                 ${rights.canEdit ? `<button class="btn btn-sm btn-outline-primary py-0" data-dispatch-one="${s.id}"><i class="bi bi-send"></i> Dispatch</button>` : ''}
                 <button class="btn btn-sm btn-outline-secondary py-0" data-one="${s.id}" title="Reprint sticker"><i class="bi bi-upc"></i></button></td></tr>`).join('')
@@ -158,13 +176,13 @@ App.ready(async () => {
         const done = sent.filter(s => s.status !== 'Collected');
         $('sent').innerHTML = done.length ? done.map(s => `<tr><td class="fw-semibold">${App.esc(s.sampleNo)}</td><td>${App.esc(s.invoiceNo)}</td>
             <td>${App.esc(s.patientName)}</td><td>${tube(s.vacutainer, s.colorHex)}</td><td class="small">${App.esc(s.tests)}</td>
-            <td class="small">${App.dateTime(s.dispatchedAt)}</td><td class="small">${App.dateTime(s.receivedAt)}</td>
+            <td class="small">${App.dateTime(s.dispatchedAt)}</td><td class="small">${App.esc(s.carrierName || '')}</td><td class="small">${App.dateTime(s.receivedAt)}</td>
             <td>${App.status(s.status)} ${s.rejectReason ? `<div class="small text-danger">${App.esc(s.rejectReason)}</div>` : ''}</td></tr>`).join('')
-            : '<tr><td colspan="8" class="empty">None.</td></tr>';
+            : '<tr><td colspan="9" class="empty">None.</td></tr>';
     }
     async function dispatch(ids, btn) {
         await App.run(async () => {
-            const res = await App.api('/api/diag/samples/dispatch', { method: 'POST', body: { sampleIds: ids } });
+            const res = await App.api('/api/diag/samples/dispatch', { method: 'POST', body: { sampleIds: ids, carrierUserId: Number($('carrier').value) || null } });
             App.toast(`${res.length} sample(s) dispatched to lab.`);
             loadDispatch();
         }, btn);

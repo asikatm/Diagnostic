@@ -34,6 +34,8 @@ public class Role : MasterEntity
     public string? Description { get; set; }
     /// <summary>Super admin bypasses menu / report permission checks.</summary>
     public bool IsSuperAdmin { get; set; }
+    /// <summary>Discount permission: highest discount (% of the discountable amount) users of this role may give. Empty = no limit.</summary>
+    public decimal? MaxDiscountPercent { get; set; }
 }
 
 public class User : BaseEntity

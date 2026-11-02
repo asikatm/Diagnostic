@@ -8,10 +8,29 @@ namespace Diagnostic.Api.Controllers.Diag;
 
 /// <summary>Investigation Entry (billing), invoice list and due collection.</summary>
 [ApiController, Route("api/diag/investigations"), MenuCode(MenuCodes.Investigation)]
-public class InvestigationsController(InvestigationService service) : ControllerBase
+public class InvestigationsController(InvestigationService service, Data.DiagnosticDbContext db, ICurrentUser currentUser) : ControllerBase
 {
     [HttpPost]
     public Task<CreateInvestigationResult> Create(CreateInvestigationDto dto) => service.CreateAsync(dto);
+
+    /// <summary>Billing counter header: what the logged-in user collected today, and the user's discount permission.</summary>
+    [HttpGet("my-collection"), PermissionAction(PermissionAction.View)]
+    public async Task<IActionResult> MyCollection()
+    {
+        var today = DateTime.Today;
+        var rows = await db.InvestigationPayments.AsNoTracking()
+            .Where(p => p.CreatedBy == currentUser.UserId && p.PaymentDate >= today && p.PaymentDate < today.AddDays(1))
+            .GroupBy(p => p.PaymentMode!.Code)
+            .Select(g => new { Code = g.Key, Amount = g.Sum(p => p.PaymentType == PaymentType.Refund ? -p.Amount : p.Amount) })
+            .ToListAsync();
+        return Ok(new
+        {
+            cash = rows.Where(r => r.Code == "CASH").Sum(r => r.Amount),
+            total = rows.Sum(r => r.Amount),
+            maxDiscountPercent = await service.MaxDiscountPercentAsync(),
+            userId = currentUser.UserId,
+        });
+    }
 
     [HttpGet, MenuCode(MenuCodes.InvoiceList)]
     public Task<PagedResult<InvoiceListItem>> List([FromQuery] InvoiceListQuery query) => service.ListAsync(query);
@@ -68,7 +87,7 @@ public class SamplesController(SampleService service) : ControllerBase
     public Task<List<SampleDto>> Collect(CollectSampleInput input) => service.CollectAsync(input);
 
     [HttpPost("dispatch"), PermissionAction(PermissionAction.Edit)]
-    public Task<List<SampleDto>> Dispatch(SampleIdsInput input) => service.DispatchAsync(input.SampleIds);
+    public Task<List<SampleDto>> Dispatch(SampleIdsInput input) => service.DispatchAsync(input.SampleIds, input.CarrierUserId);
 
     [HttpGet("repeat")]
     public Task<List<SampleDto>> RepeatPending([FromQuery] string? search) => service.RepeatPendingAsync(search);
@@ -201,9 +220,14 @@ public class LookupsController(Data.DiagnosticDbContext db) : ControllerBase
     {
         var q = new
         {
+            marketingAreas = await db.MarketingAreas.Where(d => d.IsActive).OrderBy(d => d.SortOrder).ThenBy(d => d.Name)
+                .Select(d => new LookupItem(d.Id, d.Name, d.Code)).ToListAsync(),
+            users = await db.Users.Where(u => u.IsActive).OrderBy(u => u.FullName).Select(u => new LookupItem(u.Id, u.FullName, u.UserName)).ToListAsync(),
             medias = await db.Medias.Where(d => d.IsActive).OrderBy(d => d.Name)
                 .Select(d => new { d.Id, Name = d.Phone == null ? d.Name : d.Name + " (" + d.Phone + ")", d.Code }).ToListAsync(),
-            doctors = await db.Doctors.Where(d => d.IsActive && d.IsReferrer).OrderBy(d => d.Name).Select(d => new LookupItem(d.Id, d.Name, d.Code)).ToListAsync(),
+            // "Dr. Name, MBBS, FCPS" like the referred-by box in the video.
+            doctors = await db.Doctors.Where(d => d.IsActive && d.IsReferrer).OrderBy(d => d.Name)
+                .Select(d => new LookupItem(d.Id, d.Degree == null || d.Degree == "" ? d.Name : d.Name + ", " + d.Degree, d.Code)).ToListAsync(),
             signDoctors = await db.Doctors.Where(d => d.IsActive && d.IsReportSigner).OrderBy(d => d.Name).Select(d => new LookupItem(d.Id, d.Name, d.Code)).ToListAsync(),
             paymentModes = await db.PaymentModes.Where(d => d.IsActive).OrderBy(d => d.SortOrder).Select(d => new { d.Id, d.Name, d.Code, d.RequiresReference }).ToListAsync(),
             paymentChannels = await db.PaymentChannels.Where(d => d.IsActive).OrderBy(d => d.SortOrder).Select(d => new { d.Id, d.Name, d.PaymentModeId }).ToListAsync(),

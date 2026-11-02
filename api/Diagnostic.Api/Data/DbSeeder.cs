@@ -38,6 +38,17 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
         await db.ReportParameters.IgnoreQueryFilters().Where(p => p.FontSize == 0).ExecuteUpdateAsync(s => s.SetProperty(p => p.FontSize, 10));
         await db.TestItems.IgnoreQueryFilters().Where(t => t.NumberOfSample == 0).ExecuteUpdateAsync(s => s.SetProperty(t => t.NumberOfSample, 1));
 
+        if (!await db.DoctorSpecialities.IgnoreQueryFilters().AnyAsync())
+        {
+            string[] sp = ["Medicine", "Cardiology", "Gynaecology & Obstetrics", "Paediatrics", "Orthopaedics", "Surgery", "ENT",
+                "Neurology", "Nephrology", "Gastroenterology", "Dermatology", "Pathology", "Radiology & Imaging"];
+            db.DoctorSpecialities.AddRange(sp.Select((n, i) => new DoctorSpeciality { Code = $"SP{i + 1:00}", Name = n, SortOrder = i + 1 }));
+            db.CommissionGroups.AddRange(
+                new CommissionGroup { Code = "GROUP-1", Name = "GROUP-1", CommissionPercent = 10, SortOrder = 1 },
+                new CommissionGroup { Code = "GROUP-2", Name = "GROUP-2", CommissionPercent = 15, SortOrder = 2 },
+                new CommissionGroup { Code = "GROUP-3", Name = "GROUP-3", CommissionPercent = 20, SortOrder = 3 });
+        }
+
         if (!await db.TestMethods.IgnoreQueryFilters().AnyAsync())
         {
             string[] methods = ["Photometric", "ELISA", "Chemiluminescence", "Electrochemiluminescence", "Impedance",
@@ -118,6 +129,14 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
         new(MenuCodes.Patient, "Patient", "/Master/Patient", "bi-people"),
     ];
 
+    /// <summary>Marketing module: doctors, media (JMO) and their setup.</summary>
+    private static readonly MenuSeed[] MarketingMenus =
+    [
+        new(MenuCodes.DoctorSpeciality, "Doctor Speciality", "/Master/DoctorSpeciality", "bi-heart-pulse", 20, ["ACCOUNTS"]),
+        new(MenuCodes.CommissionGroup, "Commission Group", "/Master/CommissionGroup", "bi-people", 30, ["ACCOUNTS"]),
+        new(MenuCodes.MarketingArea, "Marketing Zone", "/Master/MarketingArea", "bi-geo-alt", 50, ["ACCOUNTS"]),
+    ];
+
     /// <summary>MIS module: management reports.</summary>
     private static readonly MenuSeed[] MisMenus =
     [
@@ -150,12 +169,23 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
         var diag = await UpsertProjectAsync("DIAGNOSTIC", "Diagnostic", "bi-clipboard2-check", 1);
         var admin = await UpsertProjectAsync("ADMINISTRATIVE", "Administrative", "bi-clock", 2);
         var misIsNew = !await db.Projects.IgnoreQueryFilters().AnyAsync(p => p.Code == "MIS");
-        var mis = await UpsertProjectAsync("MIS", "MIS", "bi-bar-chart-line", 3);
+        var mis = await UpsertProjectAsync("MIS", "MIS", "bi-bar-chart-line", 4);
 
         // When the MIS module is first created, the Reports menu moves there from Diagnostic (rights are kept – same menu row).
         if (misIsNew)
             await db.Menus.IgnoreQueryFilters().Where(m => m.Code == MenuCodes.DiagReports)
                 .ExecuteUpdateAsync(s => s.SetProperty(m => m.ProjectId, mis.Id).SetProperty(m => m.SortOrder, 20));
+
+        var mktIsNew = !await db.Projects.IgnoreQueryFilters().AnyAsync(p => p.Code == "MARKETING");
+        var mkt = await UpsertProjectAsync("MARKETING", "Marketing", "bi-megaphone", 3);
+        // When the Marketing module is first created, Doctor, Media and Media Commission Setup move there (rights are kept).
+        if (mktIsNew)
+        {
+            var moves = new Dictionary<string, int> { [MenuCodes.Doctor] = 10, [MenuCodes.Media] = 40, [MenuCodes.MediaCommission] = 60 };
+            foreach (var (code, sort) in moves)
+                await db.Menus.IgnoreQueryFilters().Where(m => m.Code == code)
+                    .ExecuteUpdateAsync(s => s.SetProperty(m => m.ProjectId, mkt.Id).SetProperty(m => m.SortOrder, sort));
+        }
 
         var existing = await db.Menus.IgnoreQueryFilters().ToDictionaryAsync(m => m.Code ?? $"#{m.Id}");
         var added = new List<(Menu Menu, string[] Roles)>();
@@ -174,6 +204,7 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
         Upsert(diag, DiagnosticMenus);
         Upsert(admin, AdminMenus);
         Upsert(mis, MisMenus);
+        Upsert(mkt, MarketingMenus);
         await db.SaveChangesAsync();
 
         // Menus added to an existing database: give them to their default roles.
@@ -233,6 +264,8 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
              new("@DiscountSetupId", "Discount Scheme", "discount", false), new("@OpdPackageId", "OPD Package", "package", false)], "Landscape"),
         new("MONTHLY_INCOME", "Monthly Income (Day Wise)", "diag.usp_Rpt_MonthlyIncome", "Tabular",
             [new("@Year", "Year", "year", true, "thisyear"), new("@Month", "Month", "month", true, "thismonth"), Tenant]),
+        new("USER_WISE_COLLECTION_SUMMARY", "Userwise Collection Summary (Deposit Slip)", "diag.usp_Rpt_UserWiseCollectionSummary", "Tabular",
+            [..DateRange, Tenant, new("@UserId", "User", "user", false)], "Landscape"),
     ];
 
     private async Task SeedReportsAsync()
@@ -271,6 +304,9 @@ public class DbSeeder(DiagnosticDbContext db, IPasswordHasher<User> hasher, ILog
             // Report added to an existing database: Accounts may run it (new databases get permissions in SeedAdminAsync).
             if (accounts != null)
                 db.ReportPermissions.Add(new ReportPermission { Role = accounts, Report = report, CanView = true, CanExport = true });
+            // The cash counter prints its own deposit slip.
+            if (r.Code == "USER_WISE_COLLECTION_SUMMARY" && await db.Roles.FirstOrDefaultAsync(x => x.Code == "RECEPTION") is { } reception)
+                db.ReportPermissions.Add(new ReportPermission { Role = reception, Report = report, CanView = true, CanExport = false });
         }
         await db.SaveChangesAsync();
     }

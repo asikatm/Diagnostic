@@ -30,6 +30,9 @@ public class MachinesController(DiagnosticDbContext db) : CrudController<Machine
 [Route("api/diag/doctors"), MenuCode(MenuCodes.Doctor)]
 public class DoctorsController(DiagnosticDbContext db) : CrudController<Doctor>(db)
 {
+    protected override IQueryable<Doctor> Query() =>
+        base.Query().Include(x => x.Speciality).Include(x => x.CommissionGroup).Include(x => x.Media);
+
     protected override IQueryable<Doctor> ApplySearch(IQueryable<Doctor> q, string search) =>
         q.Where(x => x.Name.Contains(search) || x.Code!.Contains(search) || x.Phone!.Contains(search));
 }
@@ -67,6 +70,22 @@ public class TestItemsController(DiagnosticDbContext db) : CrudController<TestIt
             })
             .ToListAsync());
 }
+
+[Route("api/diag/doctor-specialities"), MenuCode(MenuCodes.DoctorSpeciality)]
+public class DoctorSpecialitiesController(DiagnosticDbContext db) : CrudController<DoctorSpeciality>(db);
+
+[Route("api/diag/commission-groups"), MenuCode(MenuCodes.CommissionGroup)]
+public class CommissionGroupsController(DiagnosticDbContext db) : CrudController<CommissionGroup>(db)
+{
+    protected override Task ValidateAsync(CommissionGroup model, CommissionGroup? existing)
+    {
+        if (model.CommissionPercent is < 0 or > 100) throw new AppException("Commission must be between 0 and 100 %.");
+        return Task.CompletedTask;
+    }
+}
+
+[Route("api/diag/marketing-areas"), MenuCode(MenuCodes.MarketingArea)]
+public class MarketingAreasController(DiagnosticDbContext db) : CrudController<MarketingArea>(db);
 
 [Route("api/diag/test-sub-groups"), MenuCode(MenuCodes.TestSubGroup)]
 public class TestSubGroupsController(DiagnosticDbContext db) : CrudController<TestSubGroup>(db)
@@ -157,6 +176,8 @@ public class LetterHeadsController(DiagnosticDbContext db) : CrudController<Lett
 [Route("api/diag/medias"), MenuCode(MenuCodes.Media)]
 public class MediasController(DiagnosticDbContext db) : CrudController<Media>(db)
 {
+    protected override IQueryable<Media> Query() => base.Query().Include(x => x.MarketingArea);
+
     protected override IQueryable<Media> ApplySearch(IQueryable<Media> q, string search) =>
         q.Where(x => x.Name.Contains(search) || x.Code!.Contains(search) || x.Phone!.Contains(search) || x.Organization!.Contains(search));
 

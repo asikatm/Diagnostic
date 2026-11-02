@@ -15,13 +15,15 @@ public record PendingSampleInvoice(int InvestigationId, string InvoiceNo, DateTi
 /// <summary>Collect by invoice (all or some of its tests) or by any list of test lines across invoices.</summary>
 public record CollectSampleInput(int? InvestigationId, List<int>? DetailIds);
 
-public record SampleIdsInput(List<int> SampleIds);
+/// <param name="CarrierUserId">Dispatch only: staff who carries the tubes to the lab.</param>
+public record SampleIdsInput(List<int> SampleIds, int? CarrierUserId = null);
 
 public record RejectSamplesInput(List<int> SampleIds, string Reason);
 
 public record SampleDto(int Id, string SampleNo, int InvestigationId, string InvoiceNo, string PatientName, string? PatientAge, Gender Gender,
     string? Vacutainer, string? ColorHex, string? Specimen, SampleStatus Status, DateTime CollectedAt, DateTime? DispatchedAt,
-    DateTime? ReceivedAt, DateTime? RejectedAt, string? RejectReason, string? RepeatOfSampleNo, string Tests);
+    DateTime? ReceivedAt, DateTime? RejectedAt, string? RejectReason, string? RepeatOfSampleNo, string Tests,
+    string? CarrierName = null, bool IsUrgent = false);
 
 /// <summary>
 /// Sample life cycle: Collect → Dispatch (collection room sends tube to lab) → Acknowledge (lab receives) or Reject.
@@ -93,16 +95,19 @@ public class SampleService(DiagnosticDbContext db, NumberSequenceService numbers
     }
 
     /// <summary>Sample Dispatch: collected tubes are sent to the lab.</summary>
-    public async Task<List<SampleDto>> DispatchAsync(List<int> sampleIds)
+    public async Task<List<SampleDto>> DispatchAsync(List<int> sampleIds, int? carrierUserId = null)
     {
         var samples = await LoadAsync(sampleIds);
         var wrong = samples.Where(s => s.Status != SampleStatus.Collected).ToList();
         if (wrong.Count > 0) throw new AppException($"Only collected samples can be dispatched: {string.Join(", ", wrong.Select(s => $"{s.SampleNo} ({s.Status})"))}.");
+        if (carrierUserId.HasValue && !await db.Users.AnyAsync(u => u.Id == carrierUserId && u.IsActive))
+            throw new AppException("Selected carrier is not an active user.");
         foreach (var s in samples)
         {
             s.Status = SampleStatus.Dispatched;
             s.DispatchedAt = DateTime.Now;
             s.DispatchedBy = currentUser.UserId;
+            s.CarrierUserId = carrierUserId;
         }
         await db.SaveChangesAsync();
         return await ByIdsAsync(sampleIds);
@@ -240,7 +245,8 @@ public class SampleService(DiagnosticDbContext db, NumberSequenceService numbers
         s.Id, s.SampleNo, s.InvestigationId, s.Investigation!.InvoiceNo, s.Investigation.Patient!.Name, s.Investigation.PatientAge,
         s.Investigation.Patient.Gender, s.Vacutainer!.Name, s.Vacutainer.ColorHex, s.Specimen!.Name, s.Status, s.CollectedAt, s.DispatchedAt,
         s.ReceivedAt, s.RejectedAt, s.RejectReason, s.RepeatOfSample!.SampleNo,
-        string.Join(", ", s.Details.Where(d => d.Status != TestStatus.Cancelled).Select(d => d.TestItem!.ShortName ?? d.TestItem.Name))));
+        string.Join(", ", s.Details.Where(d => d.Status != TestStatus.Cancelled).Select(d => d.TestItem!.ShortName ?? d.TestItem.Name)),
+        s.CarrierUser!.FullName, s.Details.Any(d => d.IsUrgent)));
 }
 
 /// <summary>Vacu &amp; machine mapping lookup: item-level mapping wins over group-level mapping.</summary>

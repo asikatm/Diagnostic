@@ -3,7 +3,9 @@
 }
 <div class="page-head">
     <div><h1>Investigation Entry</h1><div class="sub">Patient billing for diagnostic tests</div></div>
-    <div class="ms-auto d-flex gap-2">
+    <div class="ms-auto d-flex gap-2 align-items-center">
+        <span class="small fw-semibold me-1">Cash collection: <span class="text-danger" id="myCash">0</span> Tk</span>
+        <button class="btn btn-primary btn-sm" id="btnDeposit" title="Today's user-wise collection summary"><i class="bi bi-receipt me-1"></i>Deposit slip &amp; Collection Summary</button>
         <div class="form-check form-switch mt-1 me-2">
             <input class="form-check-input" type="checkbox" id="autoPrint"><label class="form-check-label small" for="autoPrint">Print receipt after save</label>
         </div>
@@ -44,6 +46,8 @@
                 <hr>
                 <label class="form-label">Referred By</label>
                 <select class="form-select" id="referDoctor"></select>
+                <label class="form-label mt-2">Area (Marketing Zone)</label>
+                <select class="form-select" id="area"></select>
                 <label class="form-label mt-2">Remarks</label>
                 <input class="form-control" id="remarks">
             </div>
@@ -99,6 +103,7 @@
                             <tr><td>Paid</td><td class="money" id="tPaid">0.00</td></tr>
                             <tr><td>Due amount</td><td class="money text-danger fw-bold" id="tDue">0.00</td></tr>
                         </table>
+                        <div class="small text-muted mb-1 d-none" id="discLimit"></div>
                         <div class="small text-danger d-none mb-2" id="remarksHint"><i class="bi bi-exclamation-circle me-1"></i>Remarks is required when any discount is applied.</div>
                         <button class="btn btn-primary w-100 py-2" id="btnSave"><i class="bi bi-save me-1"></i>POST (Save Invoice) <span class="small opacity-75">F9</span></button>
                     </div>

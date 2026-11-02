@@ -72,7 +72,25 @@ App.ready(async () => {
             <tbody>${inv.payments.map(p => `<tr><td>${App.esc(p.receiptNo)}</td><td>${App.dateTime(p.paymentDate)}</td><td>${App.esc(p.paymentType)}</td>
                 <td>${App.esc(p.paymentMode)} ${App.esc(p.paymentChannel || '')} ${App.esc(p.transactionRef || '')}</td><td class="money">${App.money(p.amount)}</td>
                 <td class="text-end"><button class="btn btn-sm btn-outline-secondary py-0" onclick="App.report('/api/reports/money-receipt/${inv.id}?paymentId=${p.id}')"><i class="bi bi-printer"></i></button></td></tr>`).join('')
-                || '<tr><td colspan="6" class="text-muted">No payment</td></tr>'}</tbody></table>`, { size: 'modal-lg' });
+                || '<tr><td colspan="6" class="text-muted">No payment</td></tr>'}</tbody></table>
+            <h6 class="fw-bold mt-3">Transaction history</h6>
+            ${ledger(inv)}`, { size: 'modal-lg' });
+    }
+
+    // Ledger like the old system: service cost (debit), discount and payments (credit), refund (debit), running balance = due.
+    // Totals on the invoice already exclude cancelled tests, so the last balance equals the due amount.
+    function ledger(inv) {
+        const rows = [{ date: inv.invoiceDate, desc: 'Service Cost', debit: inv.grossAmount + inv.vatAmount, credit: 0 }];
+        if (inv.discountAmount > 0) rows.push({ date: inv.invoiceDate, desc: 'Discount', debit: 0, credit: inv.discountAmount });
+        inv.payments.forEach(p => rows.push({
+            date: p.paymentDate, user: '', debit: p.paymentType === 'Refund' ? p.amount : 0, credit: p.paymentType === 'Refund' ? 0 : p.amount,
+            desc: `${p.paymentType === 'DueCollection' ? 'DueCollection' : p.paymentType === 'Refund' ? 'Refund' : 'Payment'}(${p.paymentMode}) ${p.receiptNo}`,
+        }));
+        let bal = 0;
+        return `<table class="table table-sm"><thead><tr><th>Date</th><th>Description</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th class="text-end">Balance</th></tr></thead>
+            <tbody>${rows.map(r => { bal += r.debit - r.credit; return `<tr><td class="small">${App.dateTime(r.date)}</td><td>${App.esc(r.desc)}</td>
+                <td class="money">${r.debit ? App.money(r.debit) : ''}</td><td class="money">${r.credit ? App.money(r.credit) : ''}</td>
+                <td class="money ${bal > 0 ? 'text-danger' : ''}">${App.money(bal)}</td></tr>`; }).join('')}</tbody></table>`;
     }
 
     function collectDue(id) {

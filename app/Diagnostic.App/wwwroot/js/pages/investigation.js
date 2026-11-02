@@ -14,6 +14,26 @@ App.ready(async () => {
     } catch (e) { App.toast(e.message, 'danger'); return; }
 
     $('referDoctor').innerHTML = App.options(lookups.doctors, '', 'Self');
+    $('area').innerHTML = App.options(lookups.marketingAreas || [], '', '-- Area --');
+
+    // Header: today's collection of this user, discount permission, deposit slip.
+    async function loadMyCollection() {
+        try {
+            const m = await App.api('/api/diag/investigations/my-collection');
+            $('myCash').textContent = App.money(m.cash);
+            state.maxDiscPct = m.maxDiscountPercent;
+            state.userId = m.userId;
+            if (m.maxDiscountPercent != null) {
+                $('discLimit').textContent = `Your discount permission: up to ${m.maxDiscountPercent}% of the discountable amount.`;
+                $('discLimit').classList.remove('d-none');
+            }
+        } catch { /* header info only */ }
+    }
+    $('btnDeposit').onclick = () => {
+        const today = App.isoDate();
+        App.report('/api/reports/run/USER_WISE_COLLECTION_SUMMARY' + App.qs({ FromDate: today, ToDate: today, UserId: state.userId }));
+    };
+    loadMyCollection();
     $('media').innerHTML = App.options(lookups.medias || [], '', 'None');
     $('media').onchange = () => $('mediaInfo').textContent = $('media').value
         ? 'Commission is calculated from Media Commission Setup when the invoice is saved.' : '';
@@ -267,7 +287,7 @@ App.ready(async () => {
         setPatient(null);
         state.lines = []; state.pkg = null; state.payTouched = false;
         $('package').value = ''; $('discountSetup').value = ''; $('extraDiscount').value = 0; $('extraPct').value = 0;
-        $('referDoctor').value = ''; $('media').value = ''; $('mediaInfo').textContent = ''; $('pTitle').value = '';
+        $('referDoctor').value = ''; $('media').value = ''; $('mediaInfo').textContent = ''; $('area').value = ''; $('pTitle').value = '';
         ['remarks', 'cardRef', 'mobileRef'].forEach(id => $(id).value = '');
         ['payCard', 'payMobile'].forEach(id => $(id).value = 0);
         render();
@@ -293,6 +313,8 @@ App.ready(async () => {
         if (!state.patient && !$('pName').value.trim()) { $('pName').focus(); throw new Error('Patient name is required.'); }
         if (state.lines.length === 0) throw new Error('Add at least one test.');
         if (paid() > state.net + 0.001) throw new Error('Paid amount cannot be more than the net payable.');
+        if (state.maxDiscPct != null && state.discountable > 0 && state.discount * 100 / state.discountable > state.maxDiscPct + 0.001)
+            throw new Error(`Your discount permission is ${state.maxDiscPct}% (${App.money(state.discountable * state.maxDiscPct / 100)} Tk). This bill gives ${App.money(state.discount)} Tk.`);
         if (state.discount > 0 && !$('remarks').value.trim()) { $('remarks').focus(); throw new Error('Remarks is required when any discount is applied.'); }
 
         const dto = {
@@ -304,6 +326,7 @@ App.ready(async () => {
             patientAge: ageText(),
             referDoctorId: Number($('referDoctor').value) || null,
             mediaId: Number($('media').value) || null,
+            marketingAreaId: Number($('area').value) || null,
             opdPackageId: state.pkg?.id ?? null,
             discountSetupId: Number($('discountSetup').value) || null,
             tests: state.lines.filter(l => !l.fromPackage).map(l => ({ testItemId: l.id, quantity: l.qty, discountPercent: l.discPct || 0,
@@ -330,6 +353,7 @@ App.ready(async () => {
         });
         m.q('[data-print]').onclick = () => App.report(receiptUrl);
         m.el.addEventListener('hidden.bs.modal', clearAll);
+        loadMyCollection();
     }, e.currentTarget);
 
     document.addEventListener('keydown', e => { if (e.key === 'F9') { e.preventDefault(); $('btnSave').click(); } });

@@ -830,6 +830,10 @@ namespace Diagnostic.Api.Data.Migrations
                     b.Property<bool>("IsSuperAdmin")
                         .HasColumnType("bit");
 
+                    b.Property<decimal?>("MaxDiscountPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(250)
@@ -1133,6 +1137,57 @@ namespace Diagnostic.Api.Data.Migrations
                     b.ToTable("CancelRequests", "diag");
                 });
 
+            modelBuilder.Entity("Diagnostic.Api.Entities.Diag.CommissionGroup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<decimal>("CommissionPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedBy")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasFilter("[Code] IS NOT NULL AND [IsDeleted] = 0");
+
+                    b.ToTable("CommissionGroups", "diag");
+                });
+
             modelBuilder.Entity("Diagnostic.Api.Entities.Diag.DiscountSetup", b =>
                 {
                     b.Property<int>("Id")
@@ -1218,9 +1273,16 @@ namespace Diagnostic.Api.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("ChamberAddress")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<string>("Code")
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
+
+                    b.Property<int?>("CommissionGroupId")
+                        .HasColumnType("int");
 
                     b.Property<decimal>("CommissionPercent")
                         .HasPrecision(5, 2)
@@ -1232,6 +1294,10 @@ namespace Diagnostic.Api.Data.Migrations
                     b.Property<int?>("CreatedBy")
                         .HasColumnType("int");
 
+                    b.Property<string>("CurrentWorkPlace")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
                     b.Property<string>("Degree")
                         .HasMaxLength(250)
                         .HasColumnType("nvarchar(250)");
@@ -1240,7 +1306,18 @@ namespace Diagnostic.Api.Data.Migrations
                         .HasMaxLength(250)
                         .HasColumnType("nvarchar(250)");
 
+                    b.Property<string>("Details")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<decimal>("ExtraAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsChamberPractitioner")
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsConsultant")
@@ -1249,18 +1326,87 @@ namespace Diagnostic.Api.Data.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsImagingReporter")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("IsReferrer")
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsReportSigner")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsSonologist")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("MediaId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(250)
                         .HasColumnType("nvarchar(250)");
 
+                    b.Property<string>("PastWorkPlace")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
                     b.Property<string>("Phone")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SpecialityId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedBy")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasFilter("[Code] IS NOT NULL AND [IsDeleted] = 0");
+
+                    b.HasIndex("CommissionGroupId");
+
+                    b.HasIndex("MediaId");
+
+                    b.HasIndex("SpecialityId");
+
+                    b.ToTable("Doctors", "diag");
+                });
+
+            modelBuilder.Entity("Diagnostic.Api.Entities.Diag.DoctorSpeciality", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
                         .HasMaxLength(250)
                         .HasColumnType("nvarchar(250)");
 
@@ -1279,7 +1425,7 @@ namespace Diagnostic.Api.Data.Migrations
                         .IsUnique()
                         .HasFilter("[Code] IS NOT NULL AND [IsDeleted] = 0");
 
-                    b.ToTable("Doctors", "diag");
+                    b.ToTable("DoctorSpecialities", "diag");
                 });
 
             modelBuilder.Entity("Diagnostic.Api.Entities.Diag.Investigation", b =>
@@ -1324,6 +1470,9 @@ namespace Diagnostic.Api.Data.Migrations
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
+
+                    b.Property<int?>("MarketingAreaId")
+                        .HasColumnType("int");
 
                     b.Property<decimal>("MediaCommission")
                         .HasPrecision(18, 2)
@@ -1387,6 +1536,8 @@ namespace Diagnostic.Api.Data.Migrations
 
                     b.HasIndex("InvoiceNo")
                         .IsUnique();
+
+                    b.HasIndex("MarketingAreaId");
 
                     b.HasIndex("MediaId");
 
@@ -1690,6 +1841,9 @@ namespace Diagnostic.Api.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<bool>("ShowInReport")
+                        .HasColumnType("bit");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
@@ -1852,6 +2006,53 @@ namespace Diagnostic.Api.Data.Migrations
                     b.ToTable("Machines", "diag");
                 });
 
+            modelBuilder.Entity("Diagnostic.Api.Entities.Diag.MarketingArea", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedBy")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasFilter("[Code] IS NOT NULL AND [IsDeleted] = 0");
+
+                    b.ToTable("MarketingAreas", "diag");
+                });
+
             modelBuilder.Entity("Diagnostic.Api.Entities.Diag.Media", b =>
                 {
                     b.Property<int>("Id")
@@ -1884,6 +2085,9 @@ namespace Diagnostic.Api.Data.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<int?>("MarketingAreaId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(250)
@@ -1911,6 +2115,8 @@ namespace Diagnostic.Api.Data.Migrations
                     b.HasIndex("Code")
                         .IsUnique()
                         .HasFilter("[Code] IS NOT NULL AND [IsDeleted] = 0");
+
+                    b.HasIndex("MarketingAreaId");
 
                     b.HasIndex("Phone");
 
@@ -2392,6 +2598,9 @@ namespace Diagnostic.Api.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("CarrierUserId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CollectedAt")
                         .HasColumnType("datetime2");
 
@@ -2461,6 +2670,8 @@ namespace Diagnostic.Api.Data.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CarrierUserId");
 
                     b.HasIndex("InvestigationId");
 
@@ -3154,11 +3365,36 @@ namespace Diagnostic.Api.Data.Migrations
                     b.Navigation("TestItem");
                 });
 
+            modelBuilder.Entity("Diagnostic.Api.Entities.Diag.Doctor", b =>
+                {
+                    b.HasOne("Diagnostic.Api.Entities.Diag.CommissionGroup", "CommissionGroup")
+                        .WithMany()
+                        .HasForeignKey("CommissionGroupId");
+
+                    b.HasOne("Diagnostic.Api.Entities.Diag.Media", "Media")
+                        .WithMany()
+                        .HasForeignKey("MediaId");
+
+                    b.HasOne("Diagnostic.Api.Entities.Diag.DoctorSpeciality", "Speciality")
+                        .WithMany()
+                        .HasForeignKey("SpecialityId");
+
+                    b.Navigation("CommissionGroup");
+
+                    b.Navigation("Media");
+
+                    b.Navigation("Speciality");
+                });
+
             modelBuilder.Entity("Diagnostic.Api.Entities.Diag.Investigation", b =>
                 {
                     b.HasOne("Diagnostic.Api.Entities.Diag.DiscountSetup", "DiscountSetup")
                         .WithMany()
                         .HasForeignKey("DiscountSetupId");
+
+                    b.HasOne("Diagnostic.Api.Entities.Diag.MarketingArea", "MarketingArea")
+                        .WithMany()
+                        .HasForeignKey("MarketingAreaId");
 
                     b.HasOne("Diagnostic.Api.Entities.Diag.Media", "Media")
                         .WithMany()
@@ -3185,6 +3421,8 @@ namespace Diagnostic.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("DiscountSetup");
+
+                    b.Navigation("MarketingArea");
 
                     b.Navigation("Media");
 
@@ -3293,6 +3531,15 @@ namespace Diagnostic.Api.Data.Migrations
                     b.Navigation("Tenant");
                 });
 
+            modelBuilder.Entity("Diagnostic.Api.Entities.Diag.Media", b =>
+                {
+                    b.HasOne("Diagnostic.Api.Entities.Diag.MarketingArea", "MarketingArea")
+                        .WithMany()
+                        .HasForeignKey("MarketingAreaId");
+
+                    b.Navigation("MarketingArea");
+                });
+
             modelBuilder.Entity("Diagnostic.Api.Entities.Diag.MediaCommissionSetup", b =>
                 {
                     b.HasOne("Diagnostic.Api.Entities.Diag.Media", "Media")
@@ -3382,6 +3629,10 @@ namespace Diagnostic.Api.Data.Migrations
 
             modelBuilder.Entity("Diagnostic.Api.Entities.Diag.SampleCollection", b =>
                 {
+                    b.HasOne("Diagnostic.Api.Entities.Admin.User", "CarrierUser")
+                        .WithMany()
+                        .HasForeignKey("CarrierUserId");
+
                     b.HasOne("Diagnostic.Api.Entities.Diag.Investigation", "Investigation")
                         .WithMany()
                         .HasForeignKey("InvestigationId")
@@ -3400,6 +3651,8 @@ namespace Diagnostic.Api.Data.Migrations
                     b.HasOne("Diagnostic.Api.Entities.Diag.Vacutainer", "Vacutainer")
                         .WithMany()
                         .HasForeignKey("VacutainerId");
+
+                    b.Navigation("CarrierUser");
 
                     b.Navigation("Investigation");
 

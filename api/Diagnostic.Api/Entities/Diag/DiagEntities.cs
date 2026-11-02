@@ -192,16 +192,46 @@ public class LetterHead : MasterEntity
     public bool IsDefault { get; set; }
 }
 
+// ======================= Marketing =======================
+
+public class DoctorSpeciality : MasterEntity { }
+
+/// <summary>Referral commission group; a doctor in a group earns the group's percent.</summary>
+public class CommissionGroup : MasterEntity
+{
+    public decimal CommissionPercent { get; set; }
+}
+
+/// <summary>Marketing zone / area a patient comes from (used for marketing reports).</summary>
+public class MarketingArea : MasterEntity { }
+
 public class Doctor : MasterEntity
 {
+    /// <summary>Degrees / professional identity, e.g. "MBBS, FCPS, FRCS".</summary>
     public string? Degree { get; set; }
     public string? Designation { get; set; }
     public string? Phone { get; set; }
     public bool IsReferrer { get; set; } = true;
     public bool IsConsultant { get; set; }
-    /// <summary>Doctor who signs lab reports (pathologist / radiologist).</summary>
+    /// <summary>Pathology reporter: signs lab reports.</summary>
     public bool IsReportSigner { get; set; }
+    public bool IsImagingReporter { get; set; }
+    public bool IsSonologist { get; set; }
+    public bool IsChamberPractitioner { get; set; }
+    /// <summary>Used when the doctor has no commission group.</summary>
     public decimal CommissionPercent { get; set; }
+    public decimal ExtraAmount { get; set; }
+    public int? SpecialityId { get; set; }
+    public DoctorSpeciality? Speciality { get; set; }
+    public int? CommissionGroupId { get; set; }
+    public CommissionGroup? CommissionGroup { get; set; }
+    /// <summary>JMO / media (marketing officer) the doctor belongs to.</summary>
+    public int? MediaId { get; set; }
+    public Media? Media { get; set; }
+    public string? CurrentWorkPlace { get; set; }
+    public string? PastWorkPlace { get; set; }
+    public string? ChamberAddress { get; set; }
+    public string? Details { get; set; }
 }
 
 /// <summary>Media / agent who refers patients and earns commission on their tests.</summary>
@@ -210,6 +240,9 @@ public class Media : MasterEntity
     public string? Phone { get; set; }
     public string? Organization { get; set; }
     public string? Address { get; set; }
+    /// <summary>Marketing zone the media works in.</summary>
+    public int? MarketingAreaId { get; set; }
+    public MarketingArea? MarketingArea { get; set; }
     /// <summary>Used when no Media Commission Setup row matches a test.</summary>
     public decimal DefaultCommissionPercent { get; set; }
 }
@@ -281,6 +314,8 @@ public class Investigation : BaseEntity
     public Doctor? ReferDoctor { get; set; }
     public int? MediaId { get; set; }
     public Media? Media { get; set; }
+    public int? MarketingAreaId { get; set; }
+    public MarketingArea? MarketingArea { get; set; }
     /// <summary>Sum of line commissions of non-cancelled tests.</summary>
     public decimal MediaCommission { get; set; }
     public int? OpdPackageId { get; set; }
@@ -371,6 +406,9 @@ public class SampleCollection : BaseEntity
     public int? CollectedBy { get; set; }
     public DateTime? DispatchedAt { get; set; }
     public int? DispatchedBy { get; set; }
+    /// <summary>Staff who carries the tube to the lab (chosen at dispatch).</summary>
+    public int? CarrierUserId { get; set; }
+    public User? CarrierUser { get; set; }
     /// <summary>Acknowledged (received) by the lab.</summary>
     public DateTime? ReceivedAt { get; set; }
     public int? ReceivedBy { get; set; }
@@ -418,5 +456,7 @@ public class LabResult : BaseEntity
     public ReportParameter? ReportParameter { get; set; }
     public string? ResultValue { get; set; }
     public ResultFlag Flag { get; set; } = ResultFlag.Normal;
+    /// <summary>Unticked = the value is stored but not printed on the lab report.</summary>
+    public bool ShowInReport { get; set; } = true;
     public string? Remarks { get; set; }
 }

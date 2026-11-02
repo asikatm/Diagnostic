@@ -120,7 +120,7 @@ BEGIN
     JOIN diag.Patients p ON p.Id = i.PatientId
     JOIN diag.ReportParameters rp ON rp.Id = res.ReportParameterId
     LEFT JOIN diag.TestMethods tm ON tm.Id = rp.TestMethodId
-    WHERE dt.InvestigationId = @InvestigationId AND res.IsDeleted = 0
+    WHERE dt.InvestigationId = @InvestigationId AND res.IsDeleted = 0 AND res.ShowInReport = 1
       AND (dt.Status IN ('Finalized', 'Delivered') OR (@Preview = 1 AND dt.Status = 'Verified'))
       AND (NOT EXISTS (SELECT 1 FROM @ids) OR dt.Id IN (SELECT Id FROM @ids))
     ORDER BY lr.InvestigationDetailId, rp.SortOrder, rp.Id;
@@ -275,10 +275,11 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SELECT ISNULL(d.Name, 'Self') AS [Doctor], COUNT(DISTINCT i.Id) AS [Invoices], SUM(i.NetAmount) AS [Net Amount],
-           ISNULL(MAX(d.CommissionPercent), 0) AS [Commission %],
-           CAST(SUM(i.NetAmount) * ISNULL(MAX(d.CommissionPercent), 0) / 100 AS DECIMAL(18, 2)) AS [Commission]
+           ISNULL(MAX(COALESCE(cg.CommissionPercent, d.CommissionPercent)), 0) AS [Commission %],
+           CAST(SUM(i.NetAmount) * ISNULL(MAX(COALESCE(cg.CommissionPercent, d.CommissionPercent)), 0) / 100 AS DECIMAL(18, 2)) AS [Commission]
     FROM diag.Investigations i
     LEFT JOIN diag.Doctors d ON d.Id = i.ReferDoctorId
+    LEFT JOIN diag.CommissionGroups cg ON cg.Id = d.CommissionGroupId
     WHERE i.IsDeleted = 0 AND i.Status <> 'Cancelled'
       AND i.InvoiceDate >= @FromDate AND i.InvoiceDate < DATEADD(DAY, 1, @ToDate)
       AND (@TenantId IS NULL OR i.TenantId = @TenantId)
@@ -402,5 +403,37 @@ BEGIN
       AND (@MediaId IS NULL OR i.MediaId = @MediaId)
       AND (@TenantId IS NULL OR i.TenantId = @TenantId)
     ORDER BY m.Name, i.InvoiceDate, dt.Id;
+END
+GO
+
+-- ---------------- User wise collection summary (deposit slip) ----------------
+-- One row per user and invoice: new collection and due collection split by cash / card / mobile, refund and total.
+CREATE OR ALTER PROCEDURE diag.usp_Rpt_UserWiseCollectionSummary
+    @FromDate DATE,
+    @ToDate   DATE,
+    @TenantId INT = NULL,
+    @UserId   INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ISNULL(u.FullName, 'Unknown') AS [User], i.InvoiceNo AS [Bill No],
+           CONVERT(VARCHAR(16), MIN(py.PaymentDate), 120) AS [Time],
+           SUM(CASE WHEN py.PaymentType = 'Payment' AND pm.Code = 'CASH' THEN py.Amount ELSE 0 END) AS [New Cash],
+           SUM(CASE WHEN py.PaymentType = 'Payment' AND pm.Code = 'CARD' THEN py.Amount ELSE 0 END) AS [New Card],
+           SUM(CASE WHEN py.PaymentType = 'Payment' AND pm.Code NOT IN ('CASH', 'CARD') THEN py.Amount ELSE 0 END) AS [New Mobile/Other],
+           SUM(CASE WHEN py.PaymentType = 'DueCollection' AND pm.Code = 'CASH' THEN py.Amount ELSE 0 END) AS [Due Cash],
+           SUM(CASE WHEN py.PaymentType = 'DueCollection' AND pm.Code = 'CARD' THEN py.Amount ELSE 0 END) AS [Due Card],
+           SUM(CASE WHEN py.PaymentType = 'DueCollection' AND pm.Code NOT IN ('CASH', 'CARD') THEN py.Amount ELSE 0 END) AS [Due Mobile/Other],
+           SUM(CASE WHEN py.PaymentType = 'Refund' THEN py.Amount ELSE 0 END) AS [Refund],
+           SUM(CASE WHEN py.PaymentType = 'Refund' THEN -py.Amount ELSE py.Amount END) AS [Total]
+    FROM diag.InvestigationPayments py
+    JOIN diag.Investigations i ON i.Id = py.InvestigationId
+    JOIN admin.PaymentModes pm ON pm.Id = py.PaymentModeId
+    LEFT JOIN admin.Users u ON u.Id = py.CreatedBy
+    WHERE py.IsDeleted = 0 AND py.PaymentDate >= @FromDate AND py.PaymentDate < DATEADD(DAY, 1, @ToDate)
+      AND (@TenantId IS NULL OR i.TenantId = @TenantId)
+      AND (@UserId IS NULL OR py.CreatedBy = @UserId)
+    GROUP BY u.FullName, i.InvoiceNo
+    ORDER BY u.FullName, MIN(py.PaymentDate);
 END
 GO
